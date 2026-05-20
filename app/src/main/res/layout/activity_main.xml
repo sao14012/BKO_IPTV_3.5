@@ -1,37 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="horizontal"
-    android:background="#121212">
-
-    <ListView
-        android:id="@+id/lista_categorias"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:divider="#222222"
-        android:dividerHeight="1dp"
-        android:padding="8dp" />
-
-    <ListView
-        android:id="@+id/lista_canales"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1.5"
-        android:divider="#222222"
-        android:dividerHeight="1dp"
-        android:padding="8dp" />
+    android:background="#000000">
 
     <com.google.android.exoplayer2.ui.StyledPlayerView
-        android:id="@+id/player_view"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="2.5"
-        android:background="#000000"
-        app:use_controller="true"
-        app:show_timeout="5000"
-        app:resize_mode="fit" />
+        android:id="@+id/player_view_firme"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
-</LinearLayout>
+    <ImageView
+        android:id="@+id/imagen_splash"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:background="#1A1A1A"
+        android:contentDescription="Splash"
+        android:visibility="visible" />
+
+    <LinearLayout
+        android:id="@+id/contenedor_menus"
+        android:layout_width="400dp"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#E6000000"
+        android:visibility="gone"
+        android:padding="20dp">
+
+        <TextView
+            android:id="@+id/text_nombre_lista_cabecera"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="BKO IPTV"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:padding="10dp" />
+
+        <EditText
+            android:id="@+id/input_buscador_canales"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Buscar canales..."
+            android:textColor="#FFFFFF"
+            android:textColorHint="#AAAAAA"
+            android:inputType="text"
+            android:autofillHints="name" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp">
+
+            <ListView
+                android:id="@+id/list_view_grupos"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:divider="#222222"
+                android:dividerHeight="1dp" />
+
+            <ListView
+                android:id="@+id/list_view_canales"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="2"
+                android:divider="#222222"
+                android:dividerHeight="1dp" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>
