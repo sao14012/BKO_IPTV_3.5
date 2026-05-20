@@ -58,7 +58,9 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:divider="#222222"
-                android:dividerHeight="1dp" />
+                android:dividerHeight="1dp"
+                android:focusable="true"
+                android:listSelector="@drawable/item_selector" />
 
             <ListView
                 android:id="@+id/list_view_canales"
@@ -66,7 +68,10 @@
                 android:layout_height="match_parent"
                 android:layout_weight="2"
                 android:divider="#222222"
-                android:dividerHeight="1dp" />
+                android:dividerHeight="1dp"
+                android:focusable="true"
+                android:listSelector="@drawable/item_selector" />
+
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>
