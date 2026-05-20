@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:background="#121212">
+
+    <ListView
+        android:id="@+id/lista_categorias"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:divider="#222222"
+        android:dividerHeight="1dp"
+        android:padding="8dp" />
+
+    <ListView
+        android:id="@+id/lista_canales"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1.5"
+        android:divider="#222222"
+        android:dividerHeight="1dp"
+        android:padding="8dp" />
+
+    <com.google.android.exoplayer2.ui.StyledPlayerView
+        android:id="@+id/player_view"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="2.5"
+        android:background="#000000"
+        app:use_controller="true"
+        app:show_timeout="5000"
+        app:resize_mode="fit" />
+
+</LinearLayout>
