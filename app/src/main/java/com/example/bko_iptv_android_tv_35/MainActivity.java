@@ -78,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
     private static class CanalEstructura {
         String urlStream;
         String licenseKey;
+        String TEXT_DESTAQUE_AZUL = "#0057B8"; // Azul de alto contraste para Android TV
         String nombreCanal;
         String nombreOrdenado;
         String groupCanal;
@@ -322,14 +323,16 @@ public class MainActivity extends AppCompatActivity {
                 View view = super.getView(position, convertView, parent);
                 TextView text = view.findViewById(android.R.id.text1);
 
-                text.setTextSize(13);
-                text.setTextColor(android.graphics.Color.WHITE);
+                text.setTextSize(14);
                 text.setPadding(25, 30, 25, 30);
+
+                view.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                text.setTextColor(android.graphics.Color.WHITE);
 
                 view.setOnFocusChangeListener((v, hasFocus) -> {
                     if (hasFocus) {
-                        v.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
-                        text.setTextColor(android.graphics.Color.BLACK);
+                        v.setBackgroundColor(android.graphics.Color.parseColor("#0057B8"));
+                        text.setTextColor(android.graphics.Color.WHITE);
                     } else {
                         v.setBackgroundColor(android.graphics.Color.TRANSPARENT);
                         text.setTextColor(android.graphics.Color.WHITE);
@@ -846,7 +849,7 @@ public class MainActivity extends AppCompatActivity {
 
                 if (actual.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
                     logoView.setVisibility(View.GONE);
-                    nameView.setTextColor(android.graphics.Color.GREEN);
+                    nameView.setTextColor(android.graphics.Color.parseColor("#00FF00"));
                 } else {
                     nameView.setTextColor(android.graphics.Color.WHITE);
                     if (setDeCanalesFavoritos.contains(actual.urlStream)) {
@@ -867,12 +870,12 @@ public class MainActivity extends AppCompatActivity {
 
                 filaLayout.setOnFocusChangeListener((v, hasFocus) -> {
                     if (hasFocus) {
-                        v.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
-                        nameView.setTextColor(android.graphics.Color.BLACK);
+                        v.setBackgroundColor(android.graphics.Color.parseColor("#0057B8"));
+                        nameView.setTextColor(android.graphics.Color.WHITE);
                     } else {
                         v.setBackgroundColor(android.graphics.Color.TRANSPARENT);
                         if (actual.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
-                            nameView.setTextColor(android.graphics.Color.GREEN);
+                            nameView.setTextColor(android.graphics.Color.parseColor("#00FF00"));
                         } else {
                             nameView.setTextColor(android.graphics.Color.WHITE);
                         }
@@ -951,7 +954,7 @@ public class MainActivity extends AppCompatActivity {
 
                 if (actual.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
                     logoView.setVisibility(View.GONE);
-                    nameView.setTextColor(android.graphics.Color.GREEN);
+                    nameView.setTextColor(android.graphics.Color.parseColor("#00FF00"));
                 } else {
                     nameView.setTextColor(android.graphics.Color.WHITE);
                     if (setDeCanalesFavoritos.contains(actual.urlStream)) {
@@ -972,12 +975,12 @@ public class MainActivity extends AppCompatActivity {
 
                 filaLayout.setOnFocusChangeListener((v, hasFocus) -> {
                     if (hasFocus) {
-                        v.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
-                        nameView.setTextColor(android.graphics.Color.BLACK);
+                        v.setBackgroundColor(android.graphics.Color.parseColor("#0057B8"));
+                        nameView.setTextColor(android.graphics.Color.WHITE);
                     } else {
                         v.setBackgroundColor(android.graphics.Color.TRANSPARENT);
                         if (actual.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
-                            nameView.setTextColor(android.graphics.Color.GREEN);
+                            nameView.setTextColor(android.graphics.Color.parseColor("#00FF00"));
                         } else {
                             nameView.setTextColor(android.graphics.Color.WHITE);
                         }
@@ -1302,25 +1305,26 @@ public class MainActivity extends AppCompatActivity {
 
                                 String itemText = getItem(position);
 
+                                int colorBase = android.graphics.Color.parseColor("#FFD700");
+                                if (itemText.contains("FAVORITOS")) {
+                                    colorBase = android.graphics.Color.parseColor("#00FFFF");
+                                } else if (itemText.contains("TODOS")) {
+                                    colorBase = android.graphics.Color.parseColor("#FFFFFF");
+                                }
+
+                                text.setTextColor(colorBase);
+                                view.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+
+                                final int colorOriginal = colorBase;
                                 view.setOnFocusChangeListener((v, hasFocus) -> {
                                     if (hasFocus) {
-                                        v.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
-                                        text.setTextColor(android.graphics.Color.BLACK);
+                                        v.setBackgroundColor(android.graphics.Color.parseColor("#0057B8"));
+                                        text.setTextColor(android.graphics.Color.WHITE);
                                     } else {
                                         v.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-                                        if (itemText.contains("FAVORITOS")) {
-                                            text.setTextColor(android.graphics.Color.CYAN);
-                                        } else {
-                                            text.setTextColor(android.graphics.Color.YELLOW);
-                                        }
+                                        text.setTextColor(colorOriginal);
                                     }
                                 });
-
-                                if (itemText.contains("FAVORITOS")) {
-                                    text.setTextColor(android.graphics.Color.CYAN);
-                                } else {
-                                    text.setTextColor(android.graphics.Color.YELLOW);
-                                }
 
                                 return view;
                             }
