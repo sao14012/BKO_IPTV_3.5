@@ -790,97 +790,43 @@ public class MainActivity extends AppCompatActivity {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
 
+        // 1. Si los menús están abiertos, permitimos que la tecla ATRÁS los cierre
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (menusVisibles) {
                 limpiarBuscadorOcultarMenus();
                 return true;
-            } else {
-                mostrarCartelConfirmarSalida();
-                return true;
             }
         }
 
+        // 2. Si los menús están OCULTOS (viendo tele a pantalla completa)
         if (!menusVisibles) {
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                if (tiempoPresionadoIzquierda == 0) {
-                    tiempoPresionadoIzquierda = System.currentTimeMillis();
-                    yaSeEjecutoLargoIzquierda = false;
-                }
-                if (!yaSeEjecutoLargoIzquierda && (System.currentTimeMillis() - tiempoPresionadoIzquierda) > 800) {
-                    yaSeEjecutoLargoIzquierda = true;
-                    mostrarGuiaRapidaComandos();
+            // Manejo del botón OK (Pulsación Corta y Larga)
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (event.getRepeatCount() == 0) {
+                        tiempoPresionadoOk = System.currentTimeMillis();
+                        yaSeEjecutoLargoOk = false;
+                    } else {
+                        // Si mantiene presionado por más de 1 segundo (1000 ms)
+                        if (!yaSeEjecutoLargoOk && (System.currentTimeMillis() - tiempoPresionadoOk > 1000)) {
+                            yaSeEjecutoLargoOk = true;
+
+                            // ACCIÓN: Pulsación Larga (Configuración)
+                            Toast.makeText(this, "⚙️ Abriendo Configuración...", Toast.LENGTH_SHORT).show();
+                        }
+                    }
                 }
                 return true;
             }
 
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                if (tiempoPresionadoDerecha == 0) {
-                    tiempoPresionadoDerecha = System.currentTimeMillis();
-                    yaSeEjecutoLargoDerecha = false;
-                }
-                if (!yaSeEjecutoLargoDerecha && (System.currentTimeMillis() - tiempoPresionadoDerecha) > 800) {
-                    yaSeEjecutoLargoDerecha = true;
-                    alternarFavoritoCanalActual();
-                }
-                return true;
-            }
-
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                if (tiempoPresionadoArriba == 0) {
-                    tiempoPresionadoArriba = System.currentTimeMillis();
-                    yaSeEjecutoLargoArriba = false;
-                }
-                if (!yaSeEjecutoLargoArriba && (System.currentTimeMillis() - tiempoPresionadoArriba) > 800) {
-                    yaSeEjecutoLargoArriba = true;
-
-                    if (textNombreListaCabecera != null) textNombreListaCabecera.setText("BUSCAR CANAL");
-                    if (contenedorMenus != null) contenedorMenus.setVisibility(View.VISIBLE);
-                    listViewGrupos.setVisibility(View.GONE);
-                    listViewCanales.setVisibility(View.VISIBLE);
-
-                    if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.requestFocus();
-                }
-                return true;
-            }
-
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                if (player != null && player.getCurrentMediaItem() != null) {
-                    CharSequence tituloCanal = player.getCurrentMediaItem().mediaMetadata.title;
-                    Toast.makeText(this, "📺 Sintonizado: " + tituloCanal + "\n📌 Guía de programación (EPG) no disponible", Toast.LENGTH_LONG).show();
-                }
+            // Bloqueamos las flechas para que no hagan nada raro a pantalla completa
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 return true;
             }
         }
 
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            if (tiempoPresionadoOk == 0) {
-                tiempoPresionadoOk = System.currentTimeMillis();
-                yaSeEjecutoLargoOk = false;
-            }
-            if (!yaSeEjecutoLargoOk && (System.currentTimeMillis() - tiempoPresionadoOk) > 800) {
-                if (!menusVisibles) {
-                    yaSeEjecutoLargoOk = true;
-                    mostrarPanelAdministradorListas();
-                }
-            }
-            return true;
-        }
-
-        if (menusVisibles) {
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && listViewGrupos.getVisibility() == View.VISIBLE) {
-                listViewGrupos.setVisibility(View.GONE);
-                listViewCanales.setVisibility(View.VISIBLE);
-                listViewCanales.requestFocus();
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && listViewCanales.getVisibility() == View.VISIBLE) {
-                listViewCanales.setVisibility(View.GONE);
-                listViewGrupos.setVisibility(View.VISIBLE);
-                listViewGrupos.requestFocus();
-                return true;
-            }
-        }
-
+        // Si los menús están visibles, dejamos que el sistema use las flechas normalmente
         return super.onKeyDown(keyCode, event);
     }
 
@@ -888,69 +834,28 @@ public class MainActivity extends AppCompatActivity {
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
 
-        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !menusVisibles) {
-            long duracionClick = System.currentTimeMillis() - tiempoPresionadoIzquierda;
-            tiempoPresionadoIzquierda = 0;
-            if (!yaSeEjecutoLargoIzquierda && duracionClick < 800) {
-                if (textNombreListaCabecera != null) {
-                    textNombreListaCabecera.setText("LISTA: " + nombreListaActualEnUso.toUpperCase());
-                }
-                if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
-                contenedorMenus.setVisibility(View.VISIBLE);
-                listViewCanales.setVisibility(View.GONE);
-                listViewGrupos.setVisibility(View.VISIBLE);
-                listViewGrupos.requestFocus();
-            }
-            return true;
-        }
+        if (!menusVisibles) {
+            // Manejo del botón OK al soltarlo (Clic Corto)
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                long duracionClick = System.currentTimeMillis() - tiempoPresionadoOk;
+                tiempoPresionadoOk = 0;
 
-        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && !menusVisibles) {
-            long duracionClick = System.currentTimeMillis() - tiempoPresionadoDerecha;
-            tiempoPresionadoDerecha = 0;
-            if (!yaSeEjecutoLargoDerecha && duracionClick < 800) {
-                grupoSeleccionadoActual = "⭐ [ FAVORITOS ]";
-                aplicarFiltroDeGrupo(grupoSeleccionadoActual);
-                if (textNombreListaCabecera != null) {
-                    textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
-                }
-                if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
-                contenedorMenus.setVisibility(View.VISIBLE);
-                listViewGrupos.setVisibility(View.GONE);
-                listViewCanales.setVisibility(View.VISIBLE);
-                listViewCanales.requestFocus();
-            }
-            return true;
-        }
-
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP && !menusVisibles) {
-            long duracionClick = System.currentTimeMillis() - tiempoPresionadoArriba;
-            tiempoPresionadoArriba = 0;
-            if (!yaSeEjecutoLargoArriba && duracionClick < 800) {
-                if (textNombreListaCabecera != null) {
-                    textNombreListaCabecera.setText("CATEGORÍA: " + grupoSeleccionadoActual.toUpperCase());
-                }
-                if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
-                contenedorMenus.setVisibility(View.VISIBLE);
-                listViewGrupos.setVisibility(View.GONE);
-                listViewCanales.setVisibility(View.VISIBLE);
-                listViewCanales.requestFocus();
-            }
-            return true;
-        }
-
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            long duracionClick = System.currentTimeMillis() - tiempoPresionadoOk;
-            tiempoPresionadoOk = 0;
-            if (!yaSeEjecutoLargoOk && duracionClick < 800) {
-                if (!menusVisibles) {
+                if (!yaSeEjecutoLargoOk && duracionClick < 800) {
+                    // ACCIÓN: Pulsación Corta (Abre el menú izquierdo de canales)
                     alternarMenuCanales();
                 }
+                return true;
             }
-            return true;
+
+            // Anulamos las flechas viejas al soltarse a pantalla completa
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                return true;
+            }
         }
+
         return super.onKeyUp(keyCode, event);
     }
-
     private void cargarListaDesdeUrl(String urlM3u) {
         new Thread(() -> {
             try {
