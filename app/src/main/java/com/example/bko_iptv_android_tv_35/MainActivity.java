@@ -68,6 +68,8 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout contenedorMenus;
     private TextView textNombreListaCabecera;
     private EditText inputBuscadorTiempoReal;
+    private View contenedorConfiguracion;
+    private ListView listViewConfiguracion;
     private String nombreListaActualEnUso = "BKO IPTV";
 
     private static class CanalEstructura {
@@ -124,6 +126,9 @@ public class MainActivity extends AppCompatActivity {
         contenedorMenus = findViewById(R.id.contenedor_menus);
         textNombreListaCabecera = findViewById(R.id.text_nombre_lista_cabecera);
         inputBuscadorTiempoReal = findViewById(R.id.input_buscador_canales);
+        contenedorConfiguracion = findViewById(R.id.contenedor_configuracion);
+        listViewConfiguracion = findViewById(R.id.list_view_configuracion);
+        cargarOpcionesConfiguracion();
 
         if (inputBuscadorTiempoReal != null) {
             inputBuscadorTiempoReal.setOnEditorActionListener((v, actionId, event) -> {
@@ -558,233 +563,306 @@ public class MainActivity extends AppCompatActivity {
     private void limpiarBuscadorOcultarMenus() {
         if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
         if (contenedorMenus != null) contenedorMenus.setVisibility(View.GONE);
-        listViewCanales.setVisibility(View.GONE);
-        listViewGrupos.setVisibility(View.GONE);
+        if (listViewCanales != null) listViewCanales.setVisibility(View.GONE);
+        if (listViewGrupos != null) listViewGrupos.setVisibility(View.GONE);
+
+        // AGREGAR ESTA LÍNEA AQUÍ ABAJO:
+        if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
     }
 
-    private void ejecutarFiltradoEnTiempoReal(String texto) {
-        String consulta = texto.trim().toLowerCase();
-        listaFiltradaCanales.clear();
+    private void alternarMenuConfiguracion() {
+        if (contenedorConfiguracion == null) return;
 
-        if (consulta.isEmpty()) {
-            if (textNombreListaCabecera != null) {
-                if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
-                    textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
-                } else {
-                    textNombreListaCabecera.setText("CATEGORÍA: " + grupoSeleccionadoActual.toUpperCase());
+        // Si el menú izquierdo está abierto, lo cerramos primero para no superponerlos
+        if (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE) {
+            limpiarBuscadorOcultarMenus();
+        }
+
+        // Alternamos la visibilidad del menú de configuración
+        if (contenedorConfiguracion.getVisibility() == View.VISIBLE) {
+            contenedorConfiguracion.setVisibility(View.GONE);
+        } else {
+            contenedorConfiguracion.setVisibility(View.VISIBLE);
+            if (listViewConfiguracion != null) {
+                listViewConfiguracion.requestFocus(); // Le damos el foco al control remoto
+            }
+        }
+    }
+
+    private void cargarOpcionesConfiguracion() {
+        if (listViewConfiguracion == null) return;
+
+        // 1. Opciones del menú
+        String[] opciones = {
+                "🔗 Cambiar URL de la Lista",
+                "🔄 Recargar Lista IPTV",
+                "ℹ️ Información"
+        };
+
+        // 2. Adaptador forzando el texto a BLANCO para que no sea invisible
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(
+                this,
+                android.R.layout.simple_list_item_1,
+                opciones
+        ) {
+            @Override
+            public android.view.View getView(int position, android.view.View convertView, android.view.ViewGroup parent) {
+                android.view.View view = super.getView(position, convertView, parent);
+                android.widget.TextView text = (android.widget.TextView) view.findViewById(android.R.id.text1);
+                if (text != null) {
+                    text.setTextColor(android.graphics.Color.WHITE);
+                }
+                return view;
+            }
+        };
+
+        // 3. Asignar el adaptador
+        listViewConfiguracion.setAdapter(adapter);
+
+        // 4. Evento de click para los botones
+        listViewConfiguracion.setOnItemClickListener((parent, view, position, id) -> {
+            switch (position) {
+                case 0:
+                    android.widget.Toast.makeText(MainActivity.this, "Click en: Cambiar URL (Próximamente)", android.widget.Toast.LENGTH_SHORT).show();
+                    break;
+                case 1:
+                    android.widget.Toast.makeText(MainActivity.this, "🔄 Recargando canales...", android.widget.Toast.LENGTH_SHORT).show();
+                    limpiarBuscadorOcultarMenus();
+                    cargarListaDesdeUrl("https://gitlab.com/mortal251/ssiptvarg/-/raw/main/primerajunta/cablearg.m3u?ref_type=heads");
+                    break;
+                case 2:
+                    android.widget.Toast.makeText(MainActivity.this, "BKO IPTV v3.5 - Desarrollado para Android TV", android.widget.Toast.LENGTH_LONG).show();
+                    break;
+            }
+        });
+    } // <- CIERRA EL MÉTODO PERFECTAMENTE
+
+        private void ejecutarFiltradoEnTiempoReal (String texto){
+            String consulta = texto.trim().toLowerCase();
+            listaFiltradaCanales.clear();
+
+            if (consulta.isEmpty()) {
+                if (textNombreListaCabecera != null) {
+                    if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
+                        textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
+                    } else {
+                        textNombreListaCabecera.setText("CATEGORÍA: " + grupoSeleccionadoActual.toUpperCase());
+                    }
+                }
+                for (CanalEstructura canal : listaGlobalCanales) {
+                    if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
+                        listaFiltradaCanales.add(canal);
+                    } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
+                        if (setDeCanalesFavoritos.contains(canal.urlStream)) {
+                            listaFiltradaCanales.add(canal);
+                        }
+                    } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
+                        listaFiltradaCanales.add(canal);
+                    }
+                }
+            } else {
+                if (textNombreListaCabecera != null) {
+                    textNombreListaCabecera.setText("BUSCANDO: " + consulta.toUpperCase());
+                }
+                for (CanalEstructura canal : listaGlobalCanales) {
+                    if (canal.nombreCanal.toLowerCase().contains(consulta)) {
+                        listaFiltradaCanales.add(canal);
+                    }
                 }
             }
+            aplicarFiltroDirectoBuscador();
+        }
+
+        private void mostrarGuiaRapidaComandos () {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle("📖 Guía de Comandos Remotos");
+
+            StringBuilder mensaje = new StringBuilder();
+            mensaje.append("• Click Corto OK: Abrir menú Canales\n");
+            mensaje.append("• Click Largo OK: Panel Administrador de Listas\n\n");
+            mensaje.append("PANTALLA COMPLETA (Viendo Tele):\n");
+            mensaje.append("• Flecha Izquierda (Corto): Abrir menú Categorías\n");
+            mensaje.append("• Flecha Izquierda (Largo): Abrir esta Guía de Comandos\n");
+            mensaje.append("• Flecha Derecha (Corto): Entrar directo a sección Favoritos\n");
+            mensaje.append("• Flecha Derecha (Largo): ⭐ AGREGAR/QUITAR canal de Favoritos\n");
+            mensaje.append("• Flecha Arriba (Corto): Abrir canales de la sección actual\n");
+            mensaje.append("• Flecha Arriba (Largo): 🔍 Hacer foco en el Buscador Directo\n");
+            mensaje.append("• Flecha Abajo (Corto): Ver Info del canal en reproducción\n\n");
+            mensaje.append("CON MENÚS ABIERTOS:\n");
+            mensaje.append("• Flechas navegan de forma clásica. Flecha Atrás cierra los paneles.");
+
+            builder.setMessage(mensaje.toString());
+            builder.setPositiveButton("Entendido", null);
+            builder.show();
+        }
+
+        private void alternarFavoritoCanalActual () {
+            if (player != null && player.getCurrentMediaItem() != null) {
+                String urlIdActual = player.getCurrentMediaItem().mediaId;
+                CharSequence tituloCanal = player.getCurrentMediaItem().mediaMetadata.title;
+
+                if (setDeCanalesFavoritos.contains(urlIdActual)) {
+                    setDeCanalesFavoritos.remove(urlIdActual);
+                    Toast.makeText(this, "❌ Quitado de Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
+                } else {
+                    setDeCanalesFavoritos.add(urlIdActual);
+                    Toast.makeText(this, "⭐ Agregado a Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
+                }
+
+                SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                prefs.edit().putStringSet(KEY_FAVORITOS_SET, setDeCanalesFavoritos).apply();
+
+                aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+            }
+        }
+
+        private void aplicarFiltroDirectoBuscador () {
+            ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
+                    this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
+                @Override
+                public View getView(int position, View convertView, ViewGroup parent) {
+                    LinearLayout filaLayout;
+                    if (convertView == null) {
+                        filaLayout = new LinearLayout(getContext());
+                        filaLayout.setOrientation(LinearLayout.HORIZONTAL);
+                        filaLayout.setPadding(30, 35, 30, 35);
+                        filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+                        ImageView imgLogo = new ImageView(getContext());
+                        imgLogo.setId(View.generateViewId());
+                        LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
+                        lpImg.rightMargin = 25;
+                        imgLogo.setLayoutParams(lpImg);
+                        filaLayout.addView(imgLogo);
+
+                        TextView textNombre = new TextView(getContext());
+                        textNombre.setId(View.generateViewId());
+                        textNombre.setTextColor(android.graphics.Color.WHITE);
+                        textNombre.setTextSize(16);
+                        filaLayout.addView(textNombre);
+                    } else {
+                        filaLayout = (LinearLayout) convertView;
+                    }
+
+                    ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
+                    TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
+
+                    CanalEstructura actual = getItem(position);
+                    nameView.setText(actual.nombreCanal);
+
+                    if (setDeCanalesFavoritos.contains(actual.urlStream)) {
+                        nameView.setText("⭐ " + actual.nombreCanal);
+                    }
+
+                    if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
+                        logoView.setVisibility(View.VISIBLE);
+                        logoView.setTag(actual.urlLogo);
+                        new Thread(() -> {
+                            try {
+                                java.io.InputStream is = new java.net.URL((String) logoView.getTag()).openStream();
+                                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
+                                runOnUiThread(() -> {
+                                    if (logoView.getTag().equals(actual.urlLogo))
+                                        logoView.setImageBitmap(bmp);
+                                });
+                            } catch (Exception ignored) {
+                            }
+                        }).start();
+                    } else {
+                        logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
+                    }
+                    return filaLayout;
+                }
+            };
+            listViewCanales.setAdapter(adapter);
+        }
+
+        private void aplicarFiltroDeGrupo (String group){
+            listaFiltradaCanales.clear();
+
             for (CanalEstructura canal : listaGlobalCanales) {
-                if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
+                if (group.equals("[ TODOS LOS CANALES ]")) {
                     listaFiltradaCanales.add(canal);
-                } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
+                } else if (group.equals("⭐ [ FAVORITOS ]")) {
                     if (setDeCanalesFavoritos.contains(canal.urlStream)) {
                         listaFiltradaCanales.add(canal);
                     }
-                } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
+                } else if (canal.grupoCanal.equalsIgnoreCase(group)) {
                     listaFiltradaCanales.add(canal);
                 }
             }
-        } else {
-            if (textNombreListaCabecera != null) {
-                textNombreListaCabecera.setText("BUSCANDO: " + consulta.toUpperCase());
-            }
-            for (CanalEstructura canal : listaGlobalCanales) {
-                if (canal.nombreCanal.toLowerCase().contains(consulta)) {
-                    listaFiltradaCanales.add(canal);
+
+            ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
+                    this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
+                @Override
+                public View getView(int position, View convertView, ViewGroup parent) {
+                    LinearLayout filaLayout;
+                    if (convertView == null) {
+                        filaLayout = new LinearLayout(getContext());
+                        filaLayout.setOrientation(LinearLayout.HORIZONTAL);
+                        filaLayout.setPadding(30, 35, 30, 35);
+                        filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+                        ImageView imgLogo = new ImageView(getContext());
+                        imgLogo.setId(View.generateViewId());
+                        LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
+                        lpImg.rightMargin = 25;
+                        imgLogo.setLayoutParams(lpImg);
+                        filaLayout.addView(imgLogo);
+
+                        TextView textNombre = new TextView(getContext());
+                        textNombre.setId(View.generateViewId());
+                        textNombre.setTextColor(android.graphics.Color.WHITE);
+                        textNombre.setTextSize(16);
+                        filaLayout.addView(textNombre);
+                    } else {
+                        filaLayout = (LinearLayout) convertView;
+                    }
+
+                    ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
+                    TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
+
+                    CanalEstructura actual = getItem(position);
+                    nameView.setText(actual.nombreCanal);
+
+                    if (setDeCanalesFavoritos.contains(actual.urlStream)) {
+                        nameView.setText("⭐ " + actual.nombreCanal);
+                    }
+
+                    if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
+                        logoView.setVisibility(View.VISIBLE);
+                        logoView.setTag(actual.urlLogo);
+                        new Thread(() -> {
+                            try {
+                                java.io.InputStream is = new java.net.URL((String) logoView.getTag()).openStream();
+                                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
+                                runOnUiThread(() -> {
+                                    if (logoView.getTag().equals(actual.urlLogo))
+                                        logoView.setImageBitmap(bmp);
+                                });
+                            } catch (Exception ignored) {
+                                runOnUiThread(() -> logoView.setImageResource(android.R.drawable.ic_menu_slideshow));
+                            }
+                        }).start();
+                    } else {
+                        logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
+                    }
+
+                    return filaLayout;
                 }
-            }
-        }
-        aplicarFiltroDirectoBuscador();
-    }
+            };
 
-    private void mostrarGuiaRapidaComandos() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("📖 Guía de Comandos Remotos");
-
-        StringBuilder mensaje = new StringBuilder();
-        mensaje.append("• Click Corto OK: Abrir menú Canales\n");
-        mensaje.append("• Click Largo OK: Panel Administrador de Listas\n\n");
-        mensaje.append("PANTALLA COMPLETA (Viendo Tele):\n");
-        mensaje.append("• Flecha Izquierda (Corto): Abrir menú Categorías\n");
-        mensaje.append("• Flecha Izquierda (Largo): Abrir esta Guía de Comandos\n");
-        mensaje.append("• Flecha Derecha (Corto): Entrar directo a sección Favoritos\n");
-        mensaje.append("• Flecha Derecha (Largo): ⭐ AGREGAR/QUITAR canal de Favoritos\n");
-        mensaje.append("• Flecha Arriba (Corto): Abrir canales de la sección actual\n");
-        mensaje.append("• Flecha Arriba (Largo): 🔍 Hacer foco en el Buscador Directo\n");
-        mensaje.append("• Flecha Abajo (Corto): Ver Info del canal en reproducción\n\n");
-        mensaje.append("CON MENÚS ABIERTOS:\n");
-        mensaje.append("• Flechas navegan de forma clásica. Flecha Atrás cierra los paneles.");
-
-        builder.setMessage(mensaje.toString());
-        builder.setPositiveButton("Entendido", null);
-        builder.show();
-    }
-
-    private void alternarFavoritoCanalActual() {
-        if (player != null && player.getCurrentMediaItem() != null) {
-            String urlIdActual = player.getCurrentMediaItem().mediaId;
-            CharSequence tituloCanal = player.getCurrentMediaItem().mediaMetadata.title;
-
-            if (setDeCanalesFavoritos.contains(urlIdActual)) {
-                setDeCanalesFavoritos.remove(urlIdActual);
-                Toast.makeText(this, "❌ Quitado de Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
-            } else {
-                setDeCanalesFavoritos.add(urlIdActual);
-                Toast.makeText(this, "⭐ Agregado a Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
-            }
-
-            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            prefs.edit().putStringSet(KEY_FAVORITOS_SET, setDeCanalesFavoritos).apply();
-
-            aplicarFiltroDeGrupo(grupoSeleccionadoActual);
-        }
-    }
-
-    private void aplicarFiltroDirectoBuscador() {
-        ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
-                this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                LinearLayout filaLayout;
-                if (convertView == null) {
-                    filaLayout = new LinearLayout(getContext());
-                    filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                    filaLayout.setPadding(30, 35, 30, 35);
-                    filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
-
-                    ImageView imgLogo = new ImageView(getContext());
-                    imgLogo.setId(View.generateViewId());
-                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
-                    lpImg.rightMargin = 25;
-                    imgLogo.setLayoutParams(lpImg);
-                    filaLayout.addView(imgLogo);
-
-                    TextView textNombre = new TextView(getContext());
-                    textNombre.setId(View.generateViewId());
-                    textNombre.setTextColor(android.graphics.Color.WHITE);
-                    textNombre.setTextSize(16);
-                    filaLayout.addView(textNombre);
-                } else {
-                    filaLayout = (LinearLayout) convertView;
-                }
-
-                ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
-                TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
-
-                CanalEstructura actual = getItem(position);
-                nameView.setText(actual.nombreCanal);
-
-                if (setDeCanalesFavoritos.contains(actual.urlStream)) {
-                    nameView.setText("⭐ " + actual.nombreCanal);
-                }
-
-                if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
-                    logoView.setVisibility(View.VISIBLE);
-                    logoView.setTag(actual.urlLogo);
-                    new Thread(() -> {
-                        try {
-                            java.io.InputStream is = new java.net.URL((String)logoView.getTag()).openStream();
-                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                            runOnUiThread(() -> {
-                                if(logoView.getTag().equals(actual.urlLogo)) logoView.setImageBitmap(bmp);
-                            });
-                        } catch (Exception ignored) {}
-                    }).start();
-                } else {
-                    logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
-                }
-                return filaLayout;
-            }
-        };
-        listViewCanales.setAdapter(adapter);
-    }
-
-    private void aplicarFiltroDeGrupo(String group) {
-        listaFiltradaCanales.clear();
-
-        for (CanalEstructura canal : listaGlobalCanales) {
-            if (group.equals("[ TODOS LOS CANALES ]")) {
-                listaFiltradaCanales.add(canal);
-            } else if (group.equals("⭐ [ FAVORITOS ]")) {
-                if (setDeCanalesFavoritos.contains(canal.urlStream)) {
-                    listaFiltradaCanales.add(canal);
-                }
-            } else if (canal.grupoCanal.equalsIgnoreCase(group)) {
-                listaFiltradaCanales.add(canal);
-            }
+            listViewCanales.setAdapter(adapter);
         }
 
-        ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
-                this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                LinearLayout filaLayout;
-                if (convertView == null) {
-                    filaLayout = new LinearLayout(getContext());
-                    filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                    filaLayout.setPadding(30, 35, 30, 35);
-                    filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
-
-                    ImageView imgLogo = new ImageView(getContext());
-                    imgLogo.setId(View.generateViewId());
-                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
-                    lpImg.rightMargin = 25;
-                    imgLogo.setLayoutParams(lpImg);
-                    filaLayout.addView(imgLogo);
-
-                    TextView textNombre = new TextView(getContext());
-                    textNombre.setId(View.generateViewId());
-                    textNombre.setTextColor(android.graphics.Color.WHITE);
-                    textNombre.setTextSize(16);
-                    filaLayout.addView(textNombre);
-                } else {
-                    filaLayout = (LinearLayout) convertView;
-                }
-
-                ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
-                TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
-
-                CanalEstructura actual = getItem(position);
-                nameView.setText(actual.nombreCanal);
-
-                if (setDeCanalesFavoritos.contains(actual.urlStream)) {
-                    nameView.setText("⭐ " + actual.nombreCanal);
-                }
-
-                if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
-                    logoView.setVisibility(View.VISIBLE);
-                    logoView.setTag(actual.urlLogo);
-                    new Thread(() -> {
-                        try {
-                            java.io.InputStream is = new java.net.URL((String)logoView.getTag()).openStream();
-                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                            runOnUiThread(() -> {
-                                if(logoView.getTag().equals(actual.urlLogo)) logoView.setImageBitmap(bmp);
-                            });
-                        } catch (Exception ignored) {
-                            runOnUiThread(() -> logoView.setImageResource(android.R.drawable.ic_menu_slideshow));
-                        }
-                    }).start();
-                } else {
-                    logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
-                }
-
-                return filaLayout;
-            }
-        };
-
-        listViewCanales.setAdapter(adapter);
-    }
-
-    private void mostrarCartelConfirmarSalida() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Cerrar Aplicación");
-        builder.setMessage("¿Desea cerrar la app?");
-        builder.setPositiveButton("SÍ", (dialog, which) -> finish());
-        builder.setNegativeButton("NO", null);
-        builder.show();
-    }
+        private void mostrarCartelConfirmarSalida () {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle("Cerrar Aplicación");
+            builder.setMessage("¿Desea cerrar la app?");
+            builder.setPositiveButton("SÍ", (dialog, which) -> finish());
+            builder.setNegativeButton("NO", null);
+            builder.show();
+        }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
@@ -800,7 +878,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 2. Si los menús están OCULTOS (viendo tele a pantalla completa)
         if (!menusVisibles) {
-            // Manejo del botón OK (Pulsación Corta y Larga)
+            // Manejo del botón OK (Pulsación Larga en vivo)
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (event.getRepeatCount() == 0) {
@@ -808,11 +886,23 @@ public class MainActivity extends AppCompatActivity {
                         yaSeEjecutoLargoOk = false;
                     } else {
                         // Si mantiene presionado por más de 1 segundo (1000 ms)
-                        if (!yaSeEjecutoLargoOk && (System.currentTimeMillis() - tiempoPresionadoOk > 1000)) {
-                            yaSeEjecutoLargoOk = true;
+                        if (System.currentTimeMillis() - tiempoPresionadoOk > 1000) {
+                            if (!yaSeEjecutoLargoOk) {
+                                yaSeEjecutoLargoOk = true;
+                                android.widget.Toast.makeText(this, "Abriendo configuración...", android.widget.Toast.LENGTH_SHORT).show();
 
-                            // ACCIÓN: Pulsación Larga (Configuración)
-                            Toast.makeText(this, "⚙️ Abriendo Configuración...", Toast.LENGTH_SHORT).show();
+                                if (contenedorMenus != null) {
+                                    contenedorMenus.setVisibility(View.GONE);
+                                }
+
+                                if (contenedorConfiguracion != null) {
+                                    contenedorConfiguracion.setVisibility(View.VISIBLE);
+                                    cargarOpcionesConfiguracion();
+                                    if (listViewConfiguracion != null) {
+                                        listViewConfiguracion.requestFocus();
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -826,7 +916,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Si los menús están visibles, dejamos que el sistema use las flechas normalmente
         return super.onKeyDown(keyCode, event);
     }
 
@@ -846,148 +935,143 @@ public class MainActivity extends AppCompatActivity {
                 }
                 return true;
             }
-
-            // Anulamos las flechas viejas al soltarse a pantalla completa
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
-                    keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                return true;
-            }
         }
 
         return super.onKeyUp(keyCode, event);
     }
-    private void cargarListaDesdeUrl(String urlM3u) {
-        new Thread(() -> {
-            try {
-                URL url = new URL(urlM3u);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(15000);
-                connection.setReadTimeout(15000);
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+        private void cargarListaDesdeUrl (String urlM3u){
+            new Thread(() -> {
+                try {
+                    URL url = new URL(urlM3u);
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    connection.setRequestMethod("GET");
+                    connection.setConnectTimeout(15000);
+                    connection.setReadTimeout(15000);
+                    connection.setRequestProperty("User-Agent", "Mozilla/5.0");
 
-                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                String linea;
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                    String linea;
 
-                String nombreCanal = "Canal Libre";
-                String grupoCanal = "Otros";
-                String urlLogo = "";
-                String ultimaLicenciaDRM = "";
+                    String nombreCanal = "Canal Libre";
+                    String grupoCanal = "Otros";
+                    String urlLogo = "";
+                    String ultimaLicenciaDRM = "";
 
-                listaGlobalCanales.clear();
-                Set<String> setDeGruposUnicos = new HashSet<>();
+                    listaGlobalCanales.clear();
+                    Set<String> setDeGruposUnicos = new HashSet<>();
 
-                while ((linea = reader.readLine()) != null) {
-                    linea = linea.trim();
-                    if (linea.isEmpty()) continue;
+                    while ((linea = reader.readLine()) != null) {
+                        linea = linea.trim();
+                        if (linea.isEmpty()) continue;
 
-                    if (linea.contains("license_key")) {
-                        ultimaLicenciaDRM = linea.split("=")[1].trim();
-                    }
-
-                    if (linea.startsWith("#EXTINF:")) {
-                        if (linea.contains("tvg-logo=\"")) {
-                            int inicioLogo = linea.indexOf("tvg-logo=\"") + 10;
-                            int finLogo = linea.indexOf("\"", inicioLogo);
-                            if (finLogo != -1) urlLogo = linea.substring(inicioLogo, finLogo).trim();
+                        if (linea.contains("license_key")) {
+                            ultimaLicenciaDRM = linea.split("=")[1].trim();
                         }
 
-                        if (linea.contains("group-title=\"")) {
-                            int inicio = linea.indexOf("group-title=\"") + 13;
-                            int fin = linea.indexOf("\"", inicio);
-                            if (fin != -1) grupoCanal = linea.substring(inicio, fin).trim();
-                        } else {
-                            grupoCanal = "Otros";
-                        }
-
-                        int comaIndex = linea.lastIndexOf(",");
-                        if (comaIndex != -1) {
-                            nombreCanal = linea.substring(comaIndex + 1).trim();
-                        } else {
-                            nombreCanal = "Canal Sin Nombre";
-                        }
-                    } else if (linea.startsWith("http://") || linea.startsWith("https://")) {
-
-                        String tipoMime = null;
-                        if (linea.contains(".mpd") || linea.contains(".mpd?")) {
-                            tipoMime = MimeTypes.APPLICATION_MPD;
-                        } else if (linea.contains(".m3u8") || linea.contains(".m3u8?")) {
-                            tipoMime = MimeTypes.APPLICATION_M3U8;
-                        }
-
-                        CanalEstructura nuevoCanal = new CanalEstructura();
-                        nuevoCanal.urlStream = linea;
-                        nuevoCanal.licenseKey = ultimaLicenciaDRM;
-                        nuevoCanal.nombreCanal = nombreCanal;
-                        nuevoCanal.grupoCanal = grupoCanal;
-                        nuevoCanal.urlLogo = urlLogo;
-                        nuevoCanal.tipoMime = tipoMime;
-
-                        String limpio = nombreCanal.toLowerCase()
-                                .replaceAll("^[^a-zA-Z0-9áéíóúñ]+", "")
-                                .trim();
-                        nuevoCanal.nombreOrdenado = limpio.isEmpty() ? nombreCanal.toLowerCase() : limpio;
-
-                        listaGlobalCanales.add(nuevoCanal);
-                        if (!grupoCanal.isEmpty()) setDeGruposUnicos.add(grupoCanal);
-
-                        nombreCanal = "Canal Libre";
-                        grupoCanal = "Otros";
-                        urlLogo = "";
-                        ultimaLicenciaDRM = "";
-                    }
-                }
-                reader.close();
-                connection.disconnect();
-
-                if (!listaGlobalCanales.isEmpty()) {
-                    Collections.sort(listaGlobalCanales, new Comparator<CanalEstructura>() {
-                        @Override
-                        public int compare(CanalEstructura c1, CanalEstructura c2) {
-                            return c1.nombreOrdenado.compareTo(c2.nombreOrdenado);
-                        }
-                    });
-
-                    listaDeGruposVisibles.clear();
-                    listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
-                    listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
-                    listaDeGruposVisibles.addAll(setDeGruposUnicos);
-
-                    runOnUiThread(() -> {
-                        grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
-                        aplicarFiltroDeGrupo(grupoSeleccionadoActual);
-
-                        if (!listaGlobalCanales.isEmpty()) {
-                            reproducirCanalEstable(listaGlobalCanales.get(0));
-                        }
-
-                        ArrayAdapter<String> adapterGrupos = new ArrayAdapter<String>(
-                                MainActivity.this, android.R.layout.simple_list_item_1, listaDeGruposVisibles) {
-                            @Override
-                            public View getView(int position, View convertView, ViewGroup parent) {
-                                View view = super.getView(position, convertView, parent);
-                                TextView text = view.findViewById(android.R.id.text1);
-                                String itemText = getItem(position);
-                                if (itemText.contains("FAVORITOS")) {
-                                    text.setTextColor(android.graphics.Color.CYAN);
-                                } else {
-                                    text.setTextColor(android.graphics.Color.YELLOW);
-                                }
-                                text.setPadding(30, 40, 30, 40);
-                                return view;
+                        if (linea.startsWith("#EXTINF:")) {
+                            if (linea.contains("tvg-logo=\"")) {
+                                int inicioLogo = linea.indexOf("tvg-logo=\"") + 10;
+                                int finLogo = linea.indexOf("\"", inicioLogo);
+                                if (finLogo != -1)
+                                    urlLogo = linea.substring(inicioLogo, finLogo).trim();
                             }
-                        };
-                        listViewGrupos.setAdapter(adapterGrupos);
+
+                            if (linea.contains("group-title=\"")) {
+                                int inicio = linea.indexOf("group-title=\"") + 13;
+                                int fin = linea.indexOf("\"", inicio);
+                                if (fin != -1) grupoCanal = linea.substring(inicio, fin).trim();
+                            } else {
+                                grupoCanal = "Otros";
+                            }
+
+                            int comaIndex = linea.lastIndexOf(",");
+                            if (comaIndex != -1) {
+                                nombreCanal = linea.substring(comaIndex + 1).trim();
+                            } else {
+                                nombreCanal = "Canal Sin Nombre";
+                            }
+                        } else if (linea.startsWith("http://") || linea.startsWith("https://")) {
+
+                            String tipoMime = null;
+                            if (linea.contains(".mpd") || linea.contains(".mpd?")) {
+                                tipoMime = MimeTypes.APPLICATION_MPD;
+                            } else if (linea.contains(".m3u8") || linea.contains(".m3u8?")) {
+                                tipoMime = MimeTypes.APPLICATION_M3U8;
+                            }
+
+                            CanalEstructura nuevoCanal = new CanalEstructura();
+                            nuevoCanal.urlStream = linea;
+                            nuevoCanal.licenseKey = ultimaLicenciaDRM;
+                            nuevoCanal.nombreCanal = nombreCanal;
+                            nuevoCanal.grupoCanal = grupoCanal;
+                            nuevoCanal.urlLogo = urlLogo;
+                            nuevoCanal.tipoMime = tipoMime;
+
+                            String limpio = nombreCanal.toLowerCase()
+                                    .replaceAll("^[^a-zA-Z0-9áéíóúñ]+", "")
+                                    .trim();
+                            nuevoCanal.nombreOrdenado = limpio.isEmpty() ? nombreCanal.toLowerCase() : limpio;
+
+                            listaGlobalCanales.add(nuevoCanal);
+                            if (!grupoCanal.isEmpty()) setDeGruposUnicos.add(grupoCanal);
+
+                            nombreCanal = "Canal Libre";
+                            grupoCanal = "Otros";
+                            urlLogo = "";
+                            ultimaLicenciaDRM = "";
+                        }
+                    }
+                    reader.close();
+                    connection.disconnect();
+
+                    if (!listaGlobalCanales.isEmpty()) {
+                        Collections.sort(listaGlobalCanales, new Comparator<CanalEstructura>() {
+                            @Override
+                            public int compare(CanalEstructura c1, CanalEstructura c2) {
+                                return c1.nombreOrdenado.compareTo(c2.nombreOrdenado);
+                            }
+                        });
+
+                        listaDeGruposVisibles.clear();
+                        listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
+                        listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
+                        listaDeGruposVisibles.addAll(setDeGruposUnicos);
+
+                        runOnUiThread(() -> {
+                            grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
+                            aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+
+                            if (!listaGlobalCanales.isEmpty()) {
+                                reproducirCanalEstable(listaGlobalCanales.get(0));
+                            }
+
+                            ArrayAdapter<String> adapterGrupos = new ArrayAdapter<String>(
+                                    MainActivity.this, android.R.layout.simple_list_item_1, listaDeGruposVisibles) {
+                                @Override
+                                public View getView(int position, View convertView, ViewGroup parent) {
+                                    View view = super.getView(position, convertView, parent);
+                                    TextView text = view.findViewById(android.R.id.text1);
+                                    String itemText = getItem(position);
+                                    if (itemText.contains("FAVORITOS")) {
+                                        text.setTextColor(android.graphics.Color.CYAN);
+                                    } else {
+                                        text.setTextColor(android.graphics.Color.YELLOW);
+                                    }
+                                    text.setPadding(30, 40, 30, 40);
+                                    return view;
+                                }
+                            };
+                            listViewGrupos.setAdapter(adapterGrupos);
+                        });
+                    }
+                } catch (Exception e) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(MainActivity.this, "Error de red al procesar la lista.", Toast.LENGTH_LONG).show();
+                        mostrarPanelAdministradorListas();
                     });
                 }
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    Toast.makeText(MainActivity.this, "Error de red al procesar la lista.", Toast.LENGTH_LONG).show();
-                    mostrarPanelAdministradorListas();
-                });
-            }
-        }).start();
-    }
+            }).start(); // <- ESTA LLAVE Y PARÉNTESIS CIERRAN EL THREAD
+        } // <- ESTA LLAVE CIERRA EL MÉTODO cargarListaDesdeUrl
 
     @Override
     protected void onStop() {
@@ -1004,4 +1088,4 @@ public class MainActivity extends AppCompatActivity {
             player = null;
         }
     }
-}
+} // <- FIN DEFINITIVO DE TODO EL ARCHIVO
