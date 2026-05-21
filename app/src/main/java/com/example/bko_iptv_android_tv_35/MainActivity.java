@@ -271,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
                     .createMediaSource(mediaItemBuilder.build());
         } else {
             mediaItemBuilder.setMimeType(canal.tipoMime);
-            if (canal.tipoMime.equals(MimeTypes.APPLICATION_M3U8)) {
+            if (canal.tipoMime != null && canal.tipoMime.equals(MimeTypes.APPLICATION_M3U8)) {
                 mediaSource = new com.google.android.exoplayer2.source.hls.HlsMediaSource.Factory(dataSourceFactory)
                         .createMediaSource(mediaItemBuilder.build());
             } else {
@@ -1003,9 +1003,11 @@ public class MainActivity extends AppCompatActivity {
                         }
                     } else if (linea.startsWith("http://") || linea.startsWith("https://")) {
 
-                        String tipoMime = MimeTypes.APPLICATION_M3U8;
-                        if (linea.contains("/mpegts") || linea.endsWith(".ts") || linea.contains(".ts?") || linea.contains(".mpd")) {
+                        String tipoMime = null;
+                        if (linea.contains(".mpd") || linea.contains(".mpd?")) {
                             tipoMime = MimeTypes.APPLICATION_MPD;
+                        } else if (linea.contains(".m3u8") || linea.contains(".m3u8?")) {
+                            tipoMime = MimeTypes.APPLICATION_M3U8;
                         }
 
                         CanalEstructura nuevoCanal = new CanalEstructura();
