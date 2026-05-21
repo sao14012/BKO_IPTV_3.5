@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.View;
@@ -25,6 +26,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.bumptech.glide.Glide;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.DefaultLoadControl;
 import com.google.android.exoplayer2.ExoPlayer;
@@ -66,6 +68,9 @@ public class MainActivity extends AppCompatActivity {
     private ImageView imagenSplash;
 
     private LinearLayout contenedorMenus;
+    private LinearLayout contenedorConfiguracion;
+    private ListView listViewConfiguracion;
+
     private TextView textNombreListaCabecera;
     private EditText inputBuscadorTiempoReal;
     private String nombreListaActualEnUso = "BKO IPTV";
@@ -75,21 +80,25 @@ public class MainActivity extends AppCompatActivity {
         String licenseKey;
         String nombreCanal;
         String nombreOrdenado;
-        String grupoCanal;
+        String groupCanal;
         String urlLogo;
         String tipoMime;
     }
 
     private List<CanalEstructura> listaGlobalCanales = new ArrayList<>();
     private List<CanalEstructura> listaFiltradaCanales = new ArrayList<>();
-
     private List<String> listaDeGruposVisibles = new ArrayList<>();
     private String grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
+
+    private boolean ocultarCanalesAdultos = false;
+    private String pinControlParental = "0000";
 
     private static final String PREFS_NAME = "BkoPrefsPro";
     private static final String KEY_LISTAS_JSON = "listas_iptv_pro_json";
     private static final String KEY_ULTIMA_URL = "ultima_url_sintonizada";
     private static final String KEY_FAVORITOS_SET = "favoritos_canales_urls";
+    private static final String KEY_PIN_PARENTAL = "pin_control_parental_v3";
+    private static final String KEY_OCULTAR_ADULTOS = "ocultar_adultos_bool";
 
     private List<String> nombresDeListasGuardadas = new ArrayList<>();
     private List<String> urlsDeListasGuardadas = new ArrayList<>();
@@ -104,8 +113,6 @@ public class MainActivity extends AppCompatActivity {
     private boolean yaSeEjecutoLargoArriba = false;
     private long tiempoPresionadoIzquierda = 0;
     private boolean yaSeEjecutoLargoIzquierda = false;
-    private long tiempoPresionadoDerecha = 0;
-    private boolean yaSeEjecutoLargoDerecha = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,6 +129,9 @@ public class MainActivity extends AppCompatActivity {
         imagenSplash = findViewById(R.id.imagen_splash);
 
         contenedorMenus = findViewById(R.id.contenedor_menus);
+        contenedorConfiguracion = findViewById(R.id.contenedor_configuracion);
+        listViewConfiguracion = findViewById(R.id.list_view_configuracion);
+
         textNombreListaCabecera = findViewById(R.id.text_nombre_lista_cabecera);
         inputBuscadorTiempoReal = findViewById(R.id.input_buscador_canales);
 
@@ -140,6 +150,8 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         setDeCanalesFavoritos = prefs.getStringSet(KEY_FAVORITOS_SET, new HashSet<>());
+        pinControlParental = prefs.getString(KEY_PIN_PARENTAL, "0000");
+        ocultarCanalesAdultos = prefs.getBoolean(KEY_OCULTAR_ADULTOS, false);
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (imagenSplash != null) imagenSplash.setVisibility(View.GONE);
@@ -182,11 +194,26 @@ public class MainActivity extends AppCompatActivity {
             });
 
             playerView.setOnClickListener(v -> alternarMenuCanales());
+            playerView.setOnLongClickListener(v -> {
+                mostrarMenuDerechoNativo();
+                return true;
+            });
 
             listViewCanales.setOnItemClickListener((parent, view, position, id) -> {
                 CanalEstructura seleccionado = listaFiltradaCanales.get(position);
-                reproducirCanalEstable(seleccionado);
-                limpiarBuscadorOcultarMenus();
+                if (seleccionado.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
+                    listViewCanales.setVisibility(View.GONE);
+                    listViewGrupos.setVisibility(View.VISIBLE);
+                    listViewGrupos.requestFocus();
+                    return;
+                }
+
+                if (esCanalAdulto(seleccionado)) {
+                    solicitarPinAcceso(seleccionado);
+                } else {
+                    reproducirCanalEstable(seleccionado);
+                    limpiarBuscadorOcultarMenus();
+                }
             });
 
             listViewGrupos.setOnItemClickListener((parent, view, position, id) -> {
@@ -197,6 +224,19 @@ public class MainActivity extends AppCompatActivity {
                 listViewGrupos.setVisibility(View.GONE);
                 listViewCanales.setVisibility(View.VISIBLE);
                 listViewCanales.requestFocus();
+            });
+
+            listViewConfiguracion.setOnItemClickListener((parent, view, position, id) -> {
+                if (position == 0) {
+                    mostrarPanelAdministradorListas();
+                } else if (position == 1) {
+                    alternarFavoritoCanalActual();
+                    mostrarMenuDerechoNativo();
+                } else if (position == 2) {
+                    alternarOcultarAdultos();
+                } else if (position == 3) {
+                    configurarNuevoPinParental();
+                }
             });
 
             if (inputBuscadorTiempoReal != null) {
@@ -234,11 +274,142 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private boolean esCanalAdulto(CanalEstructura canal) {
+        if (canal.groupCanal == null) return false;
+        String grupo = canal.groupCanal.toLowerCase();
+        String nombre = canal.nombreCanal.toLowerCase();
+        return grupo.contains("adultos") || grupo.contains("xxx") || grupo.contains("18+") ||
+                nombre.contains("xxx") || nombre.contains("adultos");
+    }
+
+    private void solicitarPinAcceso(CanalEstructura canal) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("🔒 Control Parental");
+        builder.setMessage("Ingrese el PIN de acceso para este canal:");
+
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        builder.setView(input);
+
+        builder.setPositiveButton("Ingresar", (dialog, which) -> {
+            String pinIngresado = input.getText().toString();
+            if (pinIngresado.equals(pinControlParental)) {
+                reproducirCanalEstable(canal);
+                limpiarBuscadorOcultarMenus();
+            } else {
+                Toast.makeText(MainActivity.this, "PIN Incorrecto", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Cancelar", null);
+        builder.show();
+    }
+
+    private void mostrarMenuDerechoNativo() {
+        if (contenedorMenus != null) contenedorMenus.setVisibility(View.GONE);
+
+        String textoAdultos = ocultarCanalesAdultos ? "🔓 Mostrar Canales Adultos" : "🔒 Ocultar Canales Adultos";
+        String[] opciones = {
+                "📺 Administrar Listas M3U",
+                "⭐ Favorito Canal Actual",
+                textoAdultos,
+                "🔑 Cambiar PIN Parental"
+        };
+
+        ArrayAdapter<String> adapterConfig = new ArrayAdapter<String>(
+                this, android.R.layout.simple_list_item_1, opciones) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                TextView text = view.findViewById(android.R.id.text1);
+
+                text.setTextSize(13);
+                text.setTextColor(android.graphics.Color.WHITE);
+                text.setPadding(25, 30, 25, 30);
+
+                view.setOnFocusChangeListener((v, hasFocus) -> {
+                    if (hasFocus) {
+                        v.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
+                        text.setTextColor(android.graphics.Color.BLACK);
+                    } else {
+                        v.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                        text.setTextColor(android.graphics.Color.WHITE);
+                    }
+                });
+
+                return view;
+            }
+        };
+
+        listViewConfiguracion.setAdapter(adapterConfig);
+        if (contenedorConfiguracion != null) {
+            contenedorConfiguracion.setVisibility(View.VISIBLE);
+            listViewConfiguracion.requestFocus();
+        }
+    }
+
+    private void alternarOcultarAdultos() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("🔒 Confirmar PIN Parental");
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        builder.setView(input);
+
+        builder.setPositiveButton("Verificar", (dialog, which) -> {
+            if (input.getText().toString().equals(pinControlParental)) {
+                ocultarCanalesAdultos = !ocultarCanalesAdultos;
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_OCULTAR_ADULTOS, ocultarCanalesAdultos).apply();
+                Toast.makeText(this, ocultarCanalesAdultos ? "Canales XXX ocultados" : "Canales XXX visibles", Toast.LENGTH_SHORT).show();
+
+                cargarListaDesdeUrl(urlListaActualEnUso);
+                mostrarMenuDerechoNativo();
+            } else {
+                Toast.makeText(this, "PIN Incorrecto", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Cancelar", null);
+        builder.show();
+    }
+
+    private void configurarNuevoPinParental() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("🔑 Cambiar PIN");
+        builder.setMessage("Ingrese el PIN actual:");
+        final EditText inputActual = new EditText(this);
+        inputActual.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        builder.setView(inputActual);
+
+        builder.setPositiveButton("Siguiente", (dialog, which) -> {
+            if (inputActual.getText().toString().equals(pinControlParental)) {
+                AlertDialog.Builder builderNuevo = new AlertDialog.Builder(this);
+                builderNuevo.setTitle("Nuevo PIN");
+                final EditText inputNuevo = new EditText(this);
+                inputNuevo.setInputType(InputType.TYPE_CLASS_NUMBER);
+                builderNuevo.setView(inputNuevo);
+                builderNuevo.setPositiveButton("Guardar", (d, w) -> {
+                    String nuevo = inputNuevo.getText().toString().trim();
+                    if (nuevo.length() >= 4) {
+                        pinControlParental = nuevo;
+                        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY_PIN_PARENTAL, nuevo).apply();
+                        Toast.makeText(this, "PIN Parental Actualizado", Toast.LENGTH_SHORT).show();
+                        mostrarMenuDerechoNativo();
+                    } else {
+                        Toast.makeText(this, "El PIN debe tener mínimo 4 dígitos", Toast.LENGTH_SHORT).show();
+                    }
+                });
+                builderNuevo.show();
+            } else {
+                Toast.makeText(this, "PIN Incorrecto", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Cancelar", null);
+        builder.show();
+    }
+
     private void reproducirCanalEstable(CanalEstructura canal) {
         if (player == null) return;
 
         DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
-        dataSourceFactory.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36");
+        dataSourceFactory.setUserAgent("Mozilla/5.0");
 
         Map<String, String> headers = new HashMap<>();
         headers.put("Referer", "https://player.sensa.com.ar/");
@@ -330,7 +501,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         if (!urlListaActualEnUso.isEmpty()) {
-            builder.setNegativeButton("Cerrar", null);
+            builder.setNegativeButton("Volver", (dialog, which) -> mostrarMenuDerechoNativo());
         }
         builder.show();
     }
@@ -348,6 +519,7 @@ public class MainActivity extends AppCompatActivity {
                 nombreListaActualEnUso = nombresDeListasGuardadas.get(posicionLista);
                 getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY_ULTIMA_URL, urlSeleccionada).apply();
                 cargarListaDesdeUrl(urlSeleccionada);
+                if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
             } else if (opcionElegida == 1) {
                 formularioEditarLista(posicionLista);
             } else if (opcionElegida == 2) {
@@ -541,6 +713,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void alternarMenuCanales() {
+        if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
         if (contenedorMenus != null) {
             if (contenedorMenus.getVisibility() == View.VISIBLE) {
                 limpiarBuscadorOcultarMenus();
@@ -549,8 +722,9 @@ public class MainActivity extends AppCompatActivity {
                     textNombreListaCabecera.setText("LISTA: " + nombreListaActualEnUso.toUpperCase());
                 }
                 contenedorMenus.setVisibility(View.VISIBLE);
-                listViewCanales.setVisibility(View.VISIBLE);
-                listViewCanales.requestFocus();
+                listViewGrupos.setVisibility(View.VISIBLE);
+                listViewCanales.setVisibility(View.GONE);
+                listViewGrupos.requestFocus();
             }
         }
     }
@@ -558,6 +732,7 @@ public class MainActivity extends AppCompatActivity {
     private void limpiarBuscadorOcultarMenus() {
         if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
         if (contenedorMenus != null) contenedorMenus.setVisibility(View.GONE);
+        if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
         listViewCanales.setVisibility(View.GONE);
         listViewGrupos.setVisibility(View.GONE);
     }
@@ -567,32 +742,26 @@ public class MainActivity extends AppCompatActivity {
         listaFiltradaCanales.clear();
 
         if (consulta.isEmpty()) {
-            if (textNombreListaCabecera != null) {
-                if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
-                    textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
-                } else {
-                    textNombreListaCabecera.setText("CATEGORÍA: " + grupoSeleccionadoActual.toUpperCase());
-                }
-            }
-            for (CanalEstructura canal : listaGlobalCanales) {
-                if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
-                    listaFiltradaCanales.add(canal);
-                } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
-                    if (setDeCanalesFavoritos.contains(canal.urlStream)) {
-                        listaFiltradaCanales.add(canal);
-                    }
-                } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
-                    listaFiltradaCanales.add(canal);
-                }
-            }
-        } else {
-            if (textNombreListaCabecera != null) {
-                textNombreListaCabecera.setText("BUSCANDO: " + consulta.toUpperCase());
-            }
-            for (CanalEstructura canal : listaGlobalCanales) {
-                if (canal.nombreCanal.toLowerCase().contains(consulta)) {
-                    listaFiltradaCanales.add(canal);
-                }
+            aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+            return;
+        }
+
+        listViewGrupos.setVisibility(View.GONE);
+        listViewCanales.setVisibility(View.VISIBLE);
+
+        CanalEstructura celdaAtras = new CanalEstructura();
+        celdaAtras.nombreCanal = "⬅️ VOLVER A GRUPOS";
+        celdaAtras.groupCanal = "";
+        listaFiltradaCanales.add(celdaAtras);
+
+        if (textNombreListaCabecera != null) {
+            textNombreListaCabecera.setText("BUSCANDO: " + consulta.toUpperCase());
+        }
+
+        for (CanalEstructura canal : listaGlobalCanales) {
+            if (ocultarCanalesAdultos && esCanalAdulto(canal)) continue;
+            if (canal.nombreCanal.toLowerCase().contains(consulta)) {
+                listaFiltradaCanales.add(canal);
             }
         }
         aplicarFiltroDirectoBuscador();
@@ -603,18 +772,15 @@ public class MainActivity extends AppCompatActivity {
         builder.setTitle("📖 Guía de Comandos Remotos");
 
         StringBuilder mensaje = new StringBuilder();
-        mensaje.append("• Click Corto OK: Abrir menú Canales\n");
-        mensaje.append("• Click Largo OK: Panel Administrador de Listas\n\n");
-        mensaje.append("PANTALLA COMPLETA (Viendo Tele):\n");
-        mensaje.append("• Flecha Izquierda (Corto): Abrir menú Categorías\n");
-        mensaje.append("• Flecha Izquierda (Largo): Abrir esta Guía de Comandos\n");
-        mensaje.append("• Flecha Derecha (Corto): Entrar directo a sección Favoritos\n");
-        mensaje.append("• Flecha Derecha (Largo): ⭐ AGREGAR/QUITAR canal de Favoritos\n");
-        mensaje.append("• Flecha Arriba (Corto): Abrir canales de la sección actual\n");
-        mensaje.append("• Flecha Arriba (Largo): 🔍 Hacer foco en el Buscador Directo\n");
-        mensaje.append("• Flecha Abajo (Corto): Ver Info del canal en reproducción\n\n");
-        mensaje.append("CON MENÚS ABIERTOS:\n");
-        mensaje.append("• Flechas navegan de forma clásica. Flecha Atrás cierra los paneles.");
+        mensaje.append("• Click Corto OK: Abrir menú de Canales\n");
+        mensaje.append("• Click Largo OK: ⚙️ Panel de Configuración Completo\n\n");
+        mensaje.append("PANTALLA COMPLETA:\n");
+        mensaje.append("• Flecha Izquierda (Corto): Categorías\n");
+        mensaje.append("• Flecha Izquierda (Largo): Ver esta Guía de Comandos\n");
+        mensaje.append("• Flecha Derecha (Corto): Entrar a Favoritos de una\n");
+        mensaje.append("• Flecha Arriba (Corto): Listado del grupo actual\n");
+        mensaje.append("• Flecha Arriba (Largo): 🔍 Ir directo al Buscador\n");
+        mensaje.append("• Flecha Abajo (Corto): Info del canal activo");
 
         builder.setMessage(mensaje.toString());
         builder.setPositiveButton("Entendido", null);
@@ -638,6 +804,8 @@ public class MainActivity extends AppCompatActivity {
             prefs.edit().putStringSet(KEY_FAVORITOS_SET, setDeCanalesFavoritos).apply();
 
             aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+        } else {
+            Toast.makeText(this, "No hay canales reproduciéndose", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -650,20 +818,20 @@ public class MainActivity extends AppCompatActivity {
                 if (convertView == null) {
                     filaLayout = new LinearLayout(getContext());
                     filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                    filaLayout.setPadding(30, 35, 30, 35);
+                    filaLayout.setPadding(20, 25, 20, 25);
                     filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
                     ImageView imgLogo = new ImageView(getContext());
                     imgLogo.setId(View.generateViewId());
-                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
-                    lpImg.rightMargin = 25;
+                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(55, 55);
+                    lpImg.rightMargin = 15;
                     imgLogo.setLayoutParams(lpImg);
                     filaLayout.addView(imgLogo);
 
                     TextView textNombre = new TextView(getContext());
                     textNombre.setId(View.generateViewId());
                     textNombre.setTextColor(android.graphics.Color.WHITE);
-                    textNombre.setTextSize(16);
+                    textNombre.setTextSize(14);
                     filaLayout.addView(textNombre);
                 } else {
                     filaLayout = (LinearLayout) convertView;
@@ -674,26 +842,43 @@ public class MainActivity extends AppCompatActivity {
 
                 CanalEstructura actual = getItem(position);
                 nameView.setText(actual.nombreCanal);
+                nameView.setTextSize(14);
 
-                if (setDeCanalesFavoritos.contains(actual.urlStream)) {
-                    nameView.setText("⭐ " + actual.nombreCanal);
-                }
-
-                if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
-                    logoView.setVisibility(View.VISIBLE);
-                    logoView.setTag(actual.urlLogo);
-                    new Thread(() -> {
-                        try {
-                            java.io.InputStream is = new java.net.URL((String)logoView.getTag()).openStream();
-                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                            runOnUiThread(() -> {
-                                if(logoView.getTag().equals(actual.urlLogo)) logoView.setImageBitmap(bmp);
-                            });
-                        } catch (Exception ignored) {}
-                    }).start();
+                if (actual.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
+                    logoView.setVisibility(View.GONE);
+                    nameView.setTextColor(android.graphics.Color.GREEN);
                 } else {
-                    logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
+                    nameView.setTextColor(android.graphics.Color.WHITE);
+                    if (setDeCanalesFavoritos.contains(actual.urlStream)) {
+                        nameView.setText("⭐ " + actual.nombreCanal);
+                    }
+
+                    logoView.setVisibility(View.VISIBLE);
+                    if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
+                        Glide.with(getContext())
+                                .load(actual.urlLogo)
+                                .placeholder(android.R.drawable.ic_menu_slideshow)
+                                .error(android.R.drawable.ic_menu_slideshow)
+                                .into(logoView);
+                    } else {
+                        logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
+                    }
                 }
+
+                filaLayout.setOnFocusChangeListener((v, hasFocus) -> {
+                    if (hasFocus) {
+                        v.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
+                        nameView.setTextColor(android.graphics.Color.BLACK);
+                    } else {
+                        v.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                        if (actual.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
+                            nameView.setTextColor(android.graphics.Color.GREEN);
+                        } else {
+                            nameView.setTextColor(android.graphics.Color.WHITE);
+                        }
+                    }
+                });
+
                 return filaLayout;
             }
         };
@@ -703,14 +888,29 @@ public class MainActivity extends AppCompatActivity {
     private void aplicarFiltroDeGrupo(String group) {
         listaFiltradaCanales.clear();
 
+        CanalEstructura celdaAtras = new CanalEstructura();
+        celdaAtras.nombreCanal = "⬅️ VOLVER A GRUPOS";
+        celdaAtras.groupCanal = "";
+        listaFiltradaCanales.add(celdaAtras);
+
+        if (textNombreListaCabecera != null) {
+            if (group.equals("⭐ [ FAVORITOS ]")) {
+                textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
+            } else {
+                textNombreListaCabecera.setText("CATEGORÍA: " + group.toUpperCase());
+            }
+        }
+
         for (CanalEstructura canal : listaGlobalCanales) {
+            if (ocultarCanalesAdultos && esCanalAdulto(canal)) continue;
+
             if (group.equals("[ TODOS LOS CANALES ]")) {
                 listaFiltradaCanales.add(canal);
             } else if (group.equals("⭐ [ FAVORITOS ]")) {
                 if (setDeCanalesFavoritos.contains(canal.urlStream)) {
                     listaFiltradaCanales.add(canal);
                 }
-            } else if (canal.grupoCanal.equalsIgnoreCase(group)) {
+            } else if (canal.groupCanal != null && canal.groupCanal.equalsIgnoreCase(group)) {
                 listaFiltradaCanales.add(canal);
             }
         }
@@ -723,20 +923,20 @@ public class MainActivity extends AppCompatActivity {
                 if (convertView == null) {
                     filaLayout = new LinearLayout(getContext());
                     filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                    filaLayout.setPadding(30, 35, 30, 35);
+                    filaLayout.setPadding(20, 25, 20, 25);
                     filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
                     ImageView imgLogo = new ImageView(getContext());
                     imgLogo.setId(View.generateViewId());
-                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
-                    lpImg.rightMargin = 25;
+                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(55, 55);
+                    lpImg.rightMargin = 15;
                     imgLogo.setLayoutParams(lpImg);
                     filaLayout.addView(imgLogo);
 
                     TextView textNombre = new TextView(getContext());
                     textNombre.setId(View.generateViewId());
                     textNombre.setTextColor(android.graphics.Color.WHITE);
-                    textNombre.setTextSize(16);
+                    textNombre.setTextSize(14);
                     filaLayout.addView(textNombre);
                 } else {
                     filaLayout = (LinearLayout) convertView;
@@ -747,28 +947,42 @@ public class MainActivity extends AppCompatActivity {
 
                 CanalEstructura actual = getItem(position);
                 nameView.setText(actual.nombreCanal);
+                nameView.setTextSize(14);
 
-                if (setDeCanalesFavoritos.contains(actual.urlStream)) {
-                    nameView.setText("⭐ " + actual.nombreCanal);
-                }
-
-                if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
-                    logoView.setVisibility(View.VISIBLE);
-                    logoView.setTag(actual.urlLogo);
-                    new Thread(() -> {
-                        try {
-                            java.io.InputStream is = new java.net.URL((String)logoView.getTag()).openStream();
-                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                            runOnUiThread(() -> {
-                                if(logoView.getTag().equals(actual.urlLogo)) logoView.setImageBitmap(bmp);
-                            });
-                        } catch (Exception ignored) {
-                            runOnUiThread(() -> logoView.setImageResource(android.R.drawable.ic_menu_slideshow));
-                        }
-                    }).start();
+                if (actual.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
+                    logoView.setVisibility(View.GONE);
+                    nameView.setTextColor(android.graphics.Color.GREEN);
                 } else {
-                    logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
+                    nameView.setTextColor(android.graphics.Color.WHITE);
+                    if (setDeCanalesFavoritos.contains(actual.urlStream)) {
+                        nameView.setText("⭐ " + actual.nombreCanal);
+                    }
+
+                    logoView.setVisibility(View.VISIBLE);
+                    if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
+                        Glide.with(getContext())
+                                .load(actual.urlLogo)
+                                .placeholder(android.R.drawable.ic_menu_slideshow)
+                                .error(android.R.drawable.ic_menu_slideshow)
+                                .into(logoView);
+                    } else {
+                        logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
+                    }
                 }
+
+                filaLayout.setOnFocusChangeListener((v, hasFocus) -> {
+                    if (hasFocus) {
+                        v.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
+                        nameView.setTextColor(android.graphics.Color.BLACK);
+                    } else {
+                        v.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                        if (actual.nombreCanal.equals("⬅️ VOLVER A GRUPOS")) {
+                            nameView.setTextColor(android.graphics.Color.GREEN);
+                        } else {
+                            nameView.setTextColor(android.graphics.Color.WHITE);
+                        }
+                    }
+                });
 
                 return filaLayout;
             }
@@ -789,10 +1003,21 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
+        boolean configVisible = (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE);
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (configVisible) {
+                contenedorConfiguracion.setVisibility(View.GONE);
+                return true;
+            }
             if (menusVisibles) {
-                limpiarBuscadorOcultarMenus();
+                if (listViewCanales.getVisibility() == View.VISIBLE && listViewGrupos.getVisibility() == View.GONE) {
+                    listViewCanales.setVisibility(View.GONE);
+                    listViewGrupos.setVisibility(View.VISIBLE);
+                    listViewGrupos.requestFocus();
+                } else {
+                    limpiarBuscadorOcultarMenus();
+                }
                 return true;
             } else {
                 mostrarCartelConfirmarSalida();
@@ -800,7 +1025,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        if (!menusVisibles) {
+        if (!menusVisibles && !configVisible) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                 if (tiempoPresionadoIzquierda == 0) {
                     tiempoPresionadoIzquierda = System.currentTimeMillis();
@@ -814,14 +1039,6 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                if (tiempoPresionadoDerecha == 0) {
-                    tiempoPresionadoDerecha = System.currentTimeMillis();
-                    yaSeEjecutoLargoDerecha = false;
-                }
-                if (!yaSeEjecutoLargoDerecha && (System.currentTimeMillis() - tiempoPresionadoDerecha) > 800) {
-                    yaSeEjecutoLargoDerecha = true;
-                    alternarFavoritoCanalActual();
-                }
                 return true;
             }
 
@@ -858,15 +1075,15 @@ public class MainActivity extends AppCompatActivity {
                 yaSeEjecutoLargoOk = false;
             }
             if (!yaSeEjecutoLargoOk && (System.currentTimeMillis() - tiempoPresionadoOk) > 800) {
-                if (!menusVisibles) {
+                if (!menusVisibles && !configVisible) {
                     yaSeEjecutoLargoOk = true;
-                    mostrarPanelAdministradorListas();
+                    mostrarMenuDerechoNativo();
                 }
             }
             return true;
         }
 
-        if (menusVisibles) {
+        if (menusVisibles && !configVisible) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && listViewGrupos.getVisibility() == View.VISIBLE) {
                 listViewGrupos.setVisibility(View.GONE);
                 listViewCanales.setVisibility(View.VISIBLE);
@@ -887,6 +1104,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
+        boolean configVisible = (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE);
+
+        if (configVisible) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                int pos = listViewConfiguracion.getSelectedItemPosition();
+                if (pos != ListView.INVALID_POSITION) {
+                    listViewConfiguracion.performItemClick(listViewConfiguracion.getSelectedView(), pos, listViewConfiguracion.getItemIdAtPosition(pos));
+                }
+                return true;
+            }
+            return super.onKeyUp(keyCode, event);
+        }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !menusVisibles) {
             long duracionClick = System.currentTimeMillis() - tiempoPresionadoIzquierda;
@@ -905,20 +1134,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && !menusVisibles) {
-            long duracionClick = System.currentTimeMillis() - tiempoPresionadoDerecha;
-            tiempoPresionadoDerecha = 0;
-            if (!yaSeEjecutoLargoDerecha && duracionClick < 800) {
-                grupoSeleccionadoActual = "⭐ [ FAVORITOS ]";
-                aplicarFiltroDeGrupo(grupoSeleccionadoActual);
-                if (textNombreListaCabecera != null) {
-                    textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
-                }
-                if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
-                contenedorMenus.setVisibility(View.VISIBLE);
-                listViewGrupos.setVisibility(View.GONE);
-                listViewCanales.setVisibility(View.VISIBLE);
-                listViewCanales.requestFocus();
+            grupoSeleccionadoActual = "⭐ [ FAVORITOS ]";
+            aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+            if (textNombreListaCabecera != null) {
+                textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
             }
+            if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
+            contenedorMenus.setVisibility(View.VISIBLE);
+            listViewGrupos.setVisibility(View.GONE);
+            listViewCanales.setVisibility(View.VISIBLE);
+            listViewCanales.requestFocus();
             return true;
         }
 
@@ -944,6 +1169,14 @@ public class MainActivity extends AppCompatActivity {
             if (!yaSeEjecutoLargoOk && duracionClick < 800) {
                 if (!menusVisibles) {
                     alternarMenuCanales();
+                } else {
+                    if (listViewGrupos.hasFocus()) {
+                        int pos = listViewGrupos.getSelectedItemPosition();
+                        if (pos != ListView.INVALID_POSITION) listViewGrupos.performItemClick(listViewGrupos.getSelectedView(), pos, listViewGrupos.getItemIdAtPosition(pos));
+                    } else if (listViewCanales.hasFocus()) {
+                        int pos = listViewCanales.getSelectedItemPosition();
+                        if (pos != ListView.INVALID_POSITION) listViewCanales.performItemClick(listViewCanales.getSelectedView(), pos, listViewCanales.getItemIdAtPosition(pos));
+                    }
                 }
             }
             return true;
@@ -965,7 +1198,7 @@ public class MainActivity extends AppCompatActivity {
                 String linea;
 
                 String nombreCanal = "Canal Libre";
-                String grupoCanal = "Otros";
+                String groupCanal = "Otros";
                 String urlLogo = "";
                 String ultimaLicenciaDRM = "";
 
@@ -990,9 +1223,9 @@ public class MainActivity extends AppCompatActivity {
                         if (linea.contains("group-title=\"")) {
                             int inicio = linea.indexOf("group-title=\"") + 13;
                             int fin = linea.indexOf("\"", inicio);
-                            if (fin != -1) grupoCanal = linea.substring(inicio, fin).trim();
+                            if (fin != -1) groupCanal = linea.substring(inicio, fin).trim();
                         } else {
-                            grupoCanal = "Otros";
+                            groupCanal = "Otros";
                         }
 
                         int comaIndex = linea.lastIndexOf(",");
@@ -1003,18 +1236,16 @@ public class MainActivity extends AppCompatActivity {
                         }
                     } else if (linea.startsWith("http://") || linea.startsWith("https://")) {
 
-                        String tipoMime = null;
-                        if (linea.contains(".mpd") || linea.contains(".mpd?")) {
+                        String tipoMime = MimeTypes.APPLICATION_M3U8;
+                        if (linea.contains("/mpegts") || linea.endsWith(".ts") || linea.contains(".ts?") || linea.contains(".mpd")) {
                             tipoMime = MimeTypes.APPLICATION_MPD;
-                        } else if (linea.contains(".m3u8") || linea.contains(".m3u8?")) {
-                            tipoMime = MimeTypes.APPLICATION_M3U8;
                         }
 
                         CanalEstructura nuevoCanal = new CanalEstructura();
                         nuevoCanal.urlStream = linea;
                         nuevoCanal.licenseKey = ultimaLicenciaDRM;
                         nuevoCanal.nombreCanal = nombreCanal;
-                        nuevoCanal.grupoCanal = grupoCanal;
+                        nuevoCanal.groupCanal = groupCanal;
                         nuevoCanal.urlLogo = urlLogo;
                         nuevoCanal.tipoMime = tipoMime;
 
@@ -1023,11 +1254,15 @@ public class MainActivity extends AppCompatActivity {
                                 .trim();
                         nuevoCanal.nombreOrdenado = limpio.isEmpty() ? nombreCanal.toLowerCase() : limpio;
 
-                        listaGlobalCanales.add(nuevoCanal);
-                        if (!grupoCanal.isEmpty()) setDeGruposUnicos.add(grupoCanal);
+                        boolean filtrarAdulto = ocultarCanalesAdultos && esCanalAdulto(nuevoCanal);
+
+                        if (!filtrarAdulto) {
+                            listaGlobalCanales.add(nuevoCanal);
+                            if (!groupCanal.isEmpty()) setDeGruposUnicos.add(groupCanal);
+                        }
 
                         nombreCanal = "Canal Libre";
-                        grupoCanal = "Otros";
+                        groupCanal = "Otros";
                         urlLogo = "";
                         ultimaLicenciaDRM = "";
                     }
@@ -1062,13 +1297,31 @@ public class MainActivity extends AppCompatActivity {
                             public View getView(int position, View convertView, ViewGroup parent) {
                                 View view = super.getView(position, convertView, parent);
                                 TextView text = view.findViewById(android.R.id.text1);
+                                text.setTextSize(13);
+                                text.setPadding(30, 40, 30, 40);
+
                                 String itemText = getItem(position);
+
+                                view.setOnFocusChangeListener((v, hasFocus) -> {
+                                    if (hasFocus) {
+                                        v.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
+                                        text.setTextColor(android.graphics.Color.BLACK);
+                                    } else {
+                                        v.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                                        if (itemText.contains("FAVORITOS")) {
+                                            text.setTextColor(android.graphics.Color.CYAN);
+                                        } else {
+                                            text.setTextColor(android.graphics.Color.YELLOW);
+                                        }
+                                    }
+                                });
+
                                 if (itemText.contains("FAVORITOS")) {
                                     text.setTextColor(android.graphics.Color.CYAN);
                                 } else {
                                     text.setTextColor(android.graphics.Color.YELLOW);
                                 }
-                                text.setPadding(30, 40, 30, 40);
+
                                 return view;
                             }
                         };
