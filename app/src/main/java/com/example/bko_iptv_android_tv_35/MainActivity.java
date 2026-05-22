@@ -103,12 +103,6 @@ public class MainActivity extends AppCompatActivity {
 
     private long tiempoPresionadoOk = 0;
     private boolean yaSeEjecutoLargoOk = false;
-    private long tiempoPresionadoArriba = 0;
-    private boolean yaSeEjecutoLargoArriba = false;
-    private long tiempoPresionadoIzquierda = 0;
-    private boolean yaSeEjecutoLargoIzquierda = false;
-    private long tiempoPresionadoDerecha = 0;
-    private boolean yaSeEjecutoLargoDerecha = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -124,6 +118,13 @@ public class MainActivity extends AppCompatActivity {
         listViewGrupos = findViewById(R.id.list_view_grupos);
         imagenSplash = findViewById(R.id.imagen_splash);
 
+        // === MEJORA: IGUALAR ANCHO DE GRUPOS CON EL DE CANALES ===
+        if (listViewCanales != null && listViewGrupos != null) {
+            ViewGroup.LayoutParams paramsGrupos = listViewGrupos.getLayoutParams();
+            paramsGrupos.width = listViewCanales.getLayoutParams().width;
+            listViewGrupos.setLayoutParams(paramsGrupos);
+        }
+
         contenedorMenus = findViewById(R.id.contenedor_menus);
         textNombreListaCabecera = findViewById(R.id.text_nombre_lista_cabecera);
         inputBuscadorTiempoReal = findViewById(R.id.input_buscador_canales);
@@ -131,23 +132,19 @@ public class MainActivity extends AppCompatActivity {
         listViewConfiguracion = findViewById(R.id.list_view_configuracion);
         cargarOpcionesConfiguracion();
 
-        // === CÓDIGO NUEVO PARA EL BOTÓN DE VOLVER ===
         btnVolverGrupos = findViewById(R.id.btnVolverGrupos);
 
         if (btnVolverGrupos != null) {
             btnVolverGrupos.setOnClickListener(v -> {
-                // Ocultamos canales y el propio botón
                 if (listViewCanales != null) listViewCanales.setVisibility(View.GONE);
                 btnVolverGrupos.setVisibility(View.GONE);
 
-                // Mostramos grupos y le damos el foco para usar las flechas del control
                 if (listViewGrupos != null) {
                     listViewGrupos.setVisibility(View.VISIBLE);
                     listViewGrupos.requestFocus();
                 }
             });
         }
-        // ============================================
 
         if (inputBuscadorTiempoReal != null) {
             inputBuscadorTiempoReal.setOnEditorActionListener((v, actionId, event) -> {
@@ -212,18 +209,17 @@ public class MainActivity extends AppCompatActivity {
                 reproducirCanalEstable(seleccionado);
                 limpiarBuscadorOcultarMenus();
             });
-            // --- DETECTOR HIBRIDO DE PULSACION LARGA (Para Celular y TV) ---
+
             listViewCanales.setOnItemLongClickListener((parent, view1, position, id) -> {
                 CanalEstructura canalSeleccionado = listaFiltradaCanales.get(position);
 
                 if (canalSeleccionado != null) {
-                    // Revisamos si ya es favorito usando la variable publica urlStream
                     String mensajeAccion = setDeCanalesFavoritos.contains(canalSeleccionado.urlStream)
                             ? "❌ Quitar de Favoritos"
                             : "⭐ Añadir a Favoritos";
 
                     new AlertDialog.Builder(this)
-                            .setTitle(canalSeleccionado.nombreCanal) // Variable publica nombreCanal
+                            .setTitle(canalSeleccionado.nombreCanal)
                             .setItems(new String[]{mensajeAccion}, (dialog, which) -> {
                                 if (which == 0) {
                                     alternarFavoritoCanal(canalSeleccionado);
@@ -232,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
                             .setNegativeButton("Cancelar", null)
                             .show();
                 }
-                return true; // Le avisamos a Android que ya procesamos la pulsacion larga
+                return true;
             });
 
             listViewGrupos.setOnItemClickListener((parent, view, position, id) -> {
@@ -381,7 +377,7 @@ public class MainActivity extends AppCompatActivity {
 
                     String[] opcionesAccion = {"✅ Activar y reproducir", "✏️ Editar", "❌ Eliminar"};
                     new AlertDialog.Builder(this)
-                            .setTitle("Opciones: " + nombreSeleccionado)
+                            .setTitle("Opciones: " + textNombreListaCabecera)
                             .setItems(opcionesAccion, (subDialog, opcionIndex) -> {
                                 if (opcionIndex == 0) {
                                     urlListaActualEnUso = urlSeleccionada;
@@ -404,29 +400,6 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("Cancelar", null)
                 .show();
-    }
-
-    private void mostrarOpcionesDeListaEspecifica(int posicionLista) {
-        String nombre = nombresDeListasGuardadas.get(posicionLista);
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Opciones: " + nombre);
-        String[] opciones = {"📺 Conectar / Reproducir", "✏️ Editar Nombre o URL", "❌ Borrar Lista"};
-
-        builder.setItems(opciones, (dialog, opcionElegida) -> {
-            if (opcionElegida == 0) {
-                String urlSeleccionada = urlsDeListasGuardadas.get(posicionLista);
-                urlListaActualEnUso = urlSeleccionada;
-                nombreListaActualEnUso = nombresDeListasGuardadas.get(posicionLista);
-                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY_ULTIMA_URL, urlSeleccionada).apply();
-                cargarListaDesdeUrl(urlSeleccionada);
-            } else if (opcionElegida == 1) {
-                formularioEditarLista(posicionLista);
-            } else if (opcionElegida == 2) {
-                ejecutarPrimerAvisoBorrar(posicionLista);
-            }
-        });
-        builder.setNegativeButton("Volver", (dialog, which) -> mostrarPanelAdministradorListas());
-        builder.show();
     }
 
     private void formularioEditarLista(int posicionLista) {
@@ -662,7 +635,6 @@ public class MainActivity extends AppCompatActivity {
     private void cargarOpcionesConfiguracion() {
         if (listViewConfiguracion == null) return;
 
-        // --- RECTIFICADO: Quitamos la opción de Administrar Favoritos ---
         String[] opciones = {
                 "📂 Gestión de Listas IPTV",
                 "🔞 Control Parental (Adultos)"
@@ -686,7 +658,6 @@ public class MainActivity extends AppCompatActivity {
         listViewConfiguracion.setAdapter(adapter);
         listViewConfiguracion.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
 
-        // --- RECTIFICADO: Re-mapeamos los clics de los botones de forma directa ---
         listViewConfiguracion.setOnItemClickListener((parent, view, position, id) -> {
             switch (position) {
                 case 0:
@@ -733,29 +704,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         aplicarFiltroDirectoBuscador();
-    }
-
-    private void mostrarGuiaRapidaComandos() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("📖 Guía de Comandos Remotos");
-
-        StringBuilder mensaje = new StringBuilder();
-        mensaje.append("• Click Corto OK: Abrir menú Canales\n");
-        mensaje.append("• Click Largo OK: Panel Administrator de Listas\n\n");
-        mensaje.append("PANTALLA COMPLETA (Viendo Tele):\n");
-        mensaje.append("• Flecha Izquierda (Corto): Abrir menú Categorías\n");
-        mensaje.append("• Flecha Izquierda (Largo): Abrir esta Guía de Comandos\n");
-        mensaje.append("• Flecha Derecha (Corto): Entrar directo a sección Favoritos\n");
-        mensaje.append("• Flecha Derecha (Largo): ⭐ AGREGAR/QUITAR canal de Favoritos\n");
-        mensaje.append("• Flecha Arriba (Corto): Abrir canales de la sección actual\n");
-        mensaje.append("• Flecha Arriba (Largo): 🔍 Hacer foco en el Buscador Directo\n");
-        mensaje.append("• Flecha Abajo (Corto): Ver Info del canal en reproducción\n\n");
-        mensaje.append("CON MENÚS ABIERTOS:\n");
-        mensaje.append("• Flechas navegan de forma clásica. Flecha Atrás cierra los paneles.");
-
-        builder.setMessage(mensaje.toString());
-        builder.setPositiveButton("Entendido", null);
-        builder.show();
     }
 
     private void alternarFavoritoCanal(CanalEstructura canal) {
@@ -919,15 +867,6 @@ public class MainActivity extends AppCompatActivity {
         listViewCanales.setAdapter(adapter);
         listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
         if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
-    }
-
-    private void mostrarCartelConfirmarSalida() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Cerrar Aplicación");
-        builder.setMessage("¿Desea cerrar la app?");
-        builder.setPositiveButton("SÍ", (dialog, which) -> finish());
-        builder.setNegativeButton("NO", null);
-        builder.show();
     }
 
     @Override
@@ -1095,10 +1034,14 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
 
+                    // === MEJORA: ORDENAR ALFABÉTICAMENTE LOS GRUPOS DEL M3U ===
+                    List<String> gruposOrdenados = new ArrayList<>(setDeGruposUnicos);
+                    Collections.sort(gruposOrdenados, String.CASE_INSENSITIVE_ORDER);
+
                     listaDeGruposVisibles.clear();
                     listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
                     listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
-                    listaDeGruposVisibles.addAll(setDeGruposUnicos);
+                    listaDeGruposVisibles.addAll(gruposOrdenados);
 
                     runOnUiThread(() -> {
                         grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
@@ -1244,4 +1187,4 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Cancelar", null)
                 .show();
     }
-}
+} // <- ESTA LLAVE CIERRA DEFINITIVAMENTE LA CLASE MAINACTIVITY
