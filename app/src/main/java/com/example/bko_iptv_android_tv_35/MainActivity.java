@@ -1161,9 +1161,81 @@ public class MainActivity extends AppCompatActivity {
 //       SUBMENÚS DE LA CONFIGURACIÓN
 // ==========================================
 
+    // ==========================================
+//       SUBMENÚS DE LA CONFIGURACIÓN
+// ==========================================
+
     private void mostrarSubmenuListas() {
-        // Redirige directamente al panel administrador real basado en JSON
-        mostrarPanelAdministradorListas();
+        // 1. Definimos las opciones principales del Administrador
+        String[] opcionesPrincipales = {
+                "➕ Agregar Nueva Lista",
+                "✅ Seleccionar y Activar Lista",
+                "✏️ Editar Lista",
+                "❌ Eliminar Lista"
+        };
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("📂 Gestión de Listas IPTV")
+                .setItems(opcionesPrincipales, (dialog, which) -> {
+                    // Nos aseguramos de tener la memoria fresca cargada desde el JSON
+                    cargarListasDesdeMemoria();
+
+                    if (which == 0) {
+                        // --- OPCON 1: AGREGAR NUEVA LISTA ---
+                        solicitarNuevaLista(false);
+
+                    } else if (which == 1) {
+                        // --- OPCIÓN 2: SELECCIONAR Y ACTIVAR ---
+                        if (urlsDeListasGuardadas.isEmpty()) {
+                            android.widget.Toast.makeText(this, "No tienes listas guardadas para activar", android.widget.Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        String[] nombres = nombresDeListasGuardadas.toArray(new String[0]);
+                        new android.app.AlertDialog.Builder(this)
+                                .setTitle("✅ Seleccione Lista para Activar")
+                                .setItems(nombres, (d, index) -> {
+                                    String nombreSel = nombresDeListasGuardadas.get(index);
+                                    String urlSel = urlsDeListasGuardadas.get(index);
+                                    urlListaActualEnUso = urlSel;
+                                    nombreListaActualEnUso = nombreSel;
+                                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                            .edit().putString(KEY_ULTIMA_URL, urlSel).apply();
+                                    limpiarBuscadorOcultarMenus();
+                                    cargarListaDesdeUrl(urlSel);
+                                    android.widget.Toast.makeText(this, "Cargando: " + nombreSel, android.widget.Toast.LENGTH_SHORT).show();
+                                })
+                                .setNegativeButton("Atrás", (d, w) -> mostrarSubmenuListas())
+                                .show();
+
+                    } else if (which == 2) {
+                        // --- OPCIÓN 3: EDITAR LISTA ---
+                        if (urlsDeListasGuardadas.isEmpty()) {
+                            android.widget.Toast.makeText(this, "No tienes listas guardadas para editar", android.widget.Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        String[] nombres = nombresDeListasGuardadas.toArray(new String[0]);
+                        new android.app.AlertDialog.Builder(this)
+                                .setTitle("✏️ Seleccione Lista para Editar")
+                                .setItems(nombres, (d, index) -> formularioEditarLista(index))
+                                .setNegativeButton("Atrás", (d, w) -> mostrarSubmenuListas())
+                                .show();
+
+                    } else if (which == 3) {
+                        // --- OPCIÓN 4: ELIMINAR LISTA ---
+                        if (urlsDeListasGuardadas.isEmpty()) {
+                            android.widget.Toast.makeText(this, "No tienes listas guardadas para eliminar", android.widget.Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        String[] nombres = nombresDeListasGuardadas.toArray(new String[0]);
+                        new android.app.AlertDialog.Builder(this)
+                                .setTitle("❌ Seleccione Lista para Eliminar")
+                                .setItems(nombres, (d, index) -> ejecutarPrimerAvisoBorrar(index))
+                                .setNegativeButton("Atrás", (d, w) -> mostrarSubmenuListas())
+                                .show();
+                    }
+                })
+                .setNegativeButton("Volver", null)
+                .show();
     }
 
     private void mostrarSubmenuFavoritos() {
