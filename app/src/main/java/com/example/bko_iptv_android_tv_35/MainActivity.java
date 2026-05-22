@@ -62,9 +62,9 @@ public class MainActivity extends AppCompatActivity {
     private StyledPlayerView playerView;
     private ListView listViewCanales;
     private ListView listViewGrupos;
+    private android.widget.Button btnVolverGrupos;
     private ExoPlayer player;
     private ImageView imagenSplash;
-
     private LinearLayout contenedorMenus;
     private TextView textNombreListaCabecera;
     private EditText inputBuscadorTiempoReal;
@@ -129,6 +129,24 @@ public class MainActivity extends AppCompatActivity {
         contenedorConfiguracion = findViewById(R.id.contenedor_configuracion);
         listViewConfiguracion = findViewById(R.id.list_view_configuracion);
         cargarOpcionesConfiguracion();
+
+        // === CÓDIGO NUEVO PARA EL BOTÓN DE VOLVER ===
+        btnVolverGrupos = findViewById(R.id.btnVolverGrupos);
+
+        if (btnVolverGrupos != null) {
+            btnVolverGrupos.setOnClickListener(v -> {
+                // Ocultamos canales y el propio botón
+                if (listViewCanales != null) listViewCanales.setVisibility(View.GONE);
+                btnVolverGrupos.setVisibility(View.GONE);
+
+                // Mostramos grupos y le damos el foco para usar las flechas del control
+                if (listViewGrupos != null) {
+                    listViewGrupos.setVisibility(View.VISIBLE);
+                    listViewGrupos.requestFocus();
+                }
+            });
+        }
+        // ============================================
 
         if (inputBuscadorTiempoReal != null) {
             inputBuscadorTiempoReal.setOnEditorActionListener((v, actionId, event) -> {
@@ -779,6 +797,7 @@ public class MainActivity extends AppCompatActivity {
             };
             listViewCanales.setAdapter(adapter);
             listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
+            if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
         }
 
         private void aplicarFiltroDeGrupo (String group){
@@ -858,6 +877,7 @@ public class MainActivity extends AppCompatActivity {
 
             listViewCanales.setAdapter(adapter);
             listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
+            if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
         }
 
         private void mostrarCartelConfirmarSalida () {
@@ -873,11 +893,27 @@ public class MainActivity extends AppCompatActivity {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
 
-        // 1. Si los menús están abiertos, permitimos que la tecla ATRÁS los cierre
+        // 1. Si presionan la tecla ATRÁS
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (menusVisibles) {
+                // Si hay menús abiertos, simplemente los oculta
                 limpiarBuscadorOcultarMenus();
                 return true;
+            } else {
+                // SI LOS MENÚS ESTÁN OCULTOS: Pedimos confirmación para salir
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle("Salir de la aplicación")
+                        .setMessage("¿Seguro que deseas salir de BKO IPTV?")
+                        .setPositiveButton("Sí", (dialog, which) -> {
+                            // Si dice que sí, cierra la app por completo
+                            finishAffinity();
+                        })
+                        .setNegativeButton("No", (dialog, which) -> {
+                            // Si dice que no, el cartel se cierra solo y no hace nada
+                            dialog.dismiss();
+                        })
+                        .show();
+                return true; // Le avisamos al sistema que ya manejamos el botón nosotros
             }
         }
 

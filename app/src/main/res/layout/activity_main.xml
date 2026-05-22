@@ -62,15 +62,33 @@
                 android:dividerHeight="1dp"
                 android:focusable="true" />
 
-            <ListView
-                android:id="@+id/list_view_canales"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="2"
-                android:divider="#222222"
-                android:dividerHeight="1dp"
-                android:focusable="true"
-                android:visibility="gone" />
+                android:orientation="vertical">
+
+                <Button
+                    android:id="@+id/btnVolverGrupos"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="⬅️ Volver a Categorías"
+                    android:textColor="#FFFFFF"
+                    android:background="@drawable/selector_menu_televisor"
+                    android:focusable="true"
+                    android:clickable="true"
+                    android:visibility="gone"
+                    android:layout_marginBottom="5dp"/>
+
+                <ListView
+                    android:id="@+id/list_view_canales"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:divider="#222222"
+                    android:dividerHeight="1dp"
+                    android:focusable="true"
+                    android:visibility="gone" />
+            </LinearLayout>
 
         </LinearLayout>
     </LinearLayout>
