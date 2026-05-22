@@ -337,26 +337,61 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarPanelAdministradorListas() {
-        List<String> opcionesMenu = new ArrayList<>(nombresDeListasGuardadas);
-        opcionesMenu.add("➕ Agregar Nueva Lista...");
+        // 1. Cargamos y refrescamos los ArrayLists reales desde tu memoria JSON
+        cargarListasDesdeMemoria();
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Administrador de Listas IPTV");
-        builder.setCancelable(!urlListaActualEnUso.isEmpty());
-
-        String[] items = opcionesMenu.toArray(new String[0]);
-        builder.setItems(items, (dialog, index) -> {
-            if (index == nombresDeListasGuardadas.size()) {
-                solicitarNuevaLista(false);
-            } else {
-                mostrarOpcionesDeListaEspecifica(index);
-            }
-        });
-
-        if (!urlListaActualEnUso.isEmpty()) {
-            builder.setNegativeButton("Cerrar", null);
+        // Si tu array de URLs guardadas está vacío, avisamos al usuario
+        if (urlsDeListasGuardadas.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("📂 Administrador de Listas")
+                    .setMessage("No tienes listas guardadas actualmente.")
+                    .setPositiveButton("Agregar Lista", (dialog, which) -> solicitarNuevaLista(false))
+                    .setNegativeButton("Volver", null)
+                    .show();
+            return;
         }
-        builder.show();
+
+        // 2. Convertimos tus ArrayLists existentes en un arreglo de texto para el menú
+        String[] nombresMostrar = nombresDeListasGuardadas.toArray(new String[0]);
+
+        // 3. Mostrar el diálogo con las listas reales encontradas en el JSON
+        new AlertDialog.Builder(this)
+                .setTitle("📂 Seleccione una Lista")
+                .setItems(nombresMostrar, (dialog, indexSeleccionado) -> {
+                    String nombreSeleccionado = nombresDeListasGuardadas.get(indexSeleccionado);
+                    String urlSeleccionada = urlsDeListasGuardadas.get(indexSeleccionado);
+
+                    // 4. Submenú de opciones para la lista seleccionada
+                    String[] opcionesAccion = {"✅ Activar y reproducir", "✏️ Editar", "❌ Eliminar"};
+                    new AlertDialog.Builder(this)
+                            .setTitle("Opciones: " + nombreSeleccionado)
+                            .setItems(opcionesAccion, (subDialog, opcionIndex) -> {
+                                if (opcionIndex == 0) {
+                                    // --- ACTIVAR Y REPRODUCIR ---
+                                    urlListaActualEnUso = urlSeleccionada;
+                                    nombreListaActualEnUso = nombreSeleccionado;
+                                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                            .edit().putString(KEY_ULTIMA_URL, urlSeleccionada).apply();
+                                    limpiarBuscadorOcultarMenus();
+                                    cargarListaDesdeUrl(urlSeleccionada);
+                                    Toast.makeText(this, "Cargando: " + nombreSeleccionado, Toast.LENGTH_SHORT).show();
+
+                                } else if (opcionIndex == 1) {
+                                    // --- EDITAR LISTA ---
+                                    // Llamamos directamente a tu formulario JSON nativo ya existente
+                                    formularioEditarLista(indexSeleccionado);
+
+                                } else if (opcionIndex == 2) {
+                                    // --- ELIMINAR LISTA ---
+                                    // Llamamos directamente a tu lógica de borrado JSON nativa ya existente
+                                    ejecutarPrimerAvisoBorrar(indexSeleccionado);
+                                }
+                            })
+                            .setNegativeButton("Atrás", (subDialog, w) -> mostrarPanelAdministradorListas())
+                            .show();
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
     }
 
     private void mostrarOpcionesDeListaEspecifica(int posicionLista) {
@@ -1122,31 +1157,13 @@ public class MainActivity extends AppCompatActivity {
             player = null;
         }
     }
-
-    // ==========================================
-    //       SUBMENÚS DE LA CONFIGURACIÓN
-    // ==========================================
+// ==========================================
+//       SUBMENÚS DE LA CONFIGURACIÓN
+// ==========================================
 
     private void mostrarSubmenuListas() {
-        String[] opciones = {
-                "➕ Añadir Nueva Lista URL",
-                "🔄 Recargar Lista Actual",
-                "❌ Borrar Lista Actual"
-        };
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("📂 Gestión de Listas IPTV")
-                .setItems(opciones, (dialog, which) -> {
-                    if (which == 0) {
-                        solicitarNuevaLista(false);
-                    } else if (which == 1) {
-                        limpiarBuscadorOcultarMenus();
-                        cargarListaDesdeUrl("https://gitlab.com/mortal251/ssiptvarg/-/raw/main/primerajunta/cablearg.m3u?ref_type=heads");
-                    } else if (which == 2) {
-                        android.widget.Toast.makeText(this, "Próximamente: Borrar Lista", android.widget.Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("Volver", null)
-                .show();
+        // Redirige directamente al panel administrador real basado en JSON
+        mostrarPanelAdministradorListas();
     }
 
     private void mostrarSubmenuFavoritos() {
