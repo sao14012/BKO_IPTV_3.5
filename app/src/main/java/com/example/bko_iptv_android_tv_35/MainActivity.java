@@ -71,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
     private View contenedorConfiguracion;
     private ListView listViewConfiguracion;
     private String nombreListaActualEnUso = "BKO IPTV";
+    private String claveAdultos = "0000";
 
     private static class CanalEstructura {
         String urlStream;
@@ -610,14 +611,14 @@ public class MainActivity extends AppCompatActivity {
     private void cargarOpcionesConfiguracion() {
         if (listViewConfiguracion == null) return;
 
-        // 1. Opciones del menú
+        // 1. Opciones principales actualizadas para el menú de Ajustes
         String[] opciones = {
-                "🔗 Cambiar URL de la Lista",
-                "🔄 Recargar Lista IPTV",
-                "ℹ️ Información"
+                "📂 Gestión de Listas IPTV",
+                "⭐ Administrar Favoritos",
+                "🔞 Control Parental (Adultos)"
         };
 
-        // 2. Adaptador forzando el texto a BLANCO para que no sea invisible
+        // 2. Adaptador personalizado para forzar el texto en color blanco
         android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(
                 this,
                 android.R.layout.simple_list_item_1,
@@ -626,38 +627,33 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public android.view.View getView(int position, android.view.View convertView, android.view.ViewGroup parent) {
                 android.view.View view = super.getView(position, convertView, parent);
-                android.widget.TextView text = (android.widget.TextView) view.findViewById(android.R.id.text1);
-                if (text != null) {
-                    text.setTextColor(android.graphics.Color.WHITE);
+                android.widget.TextView textView = view.findViewById(android.R.id.text1);
+                if (textView != null) {
+                    textView.setTextColor(android.graphics.Color.WHITE);
                 }
                 return view;
             }
         };
-
-        // 3. Asignar el adaptador
         listViewConfiguracion.setAdapter(adapter);
 
-        // 4. Evento de click para los botones
+        // 2.5 Inyectamos tu selector para que dibuje el borde celeste al enfocar con el control
+        listViewConfiguracion.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
+
+        // 3. Escuchamos los clics (Botón OK del control de la TV)
         listViewConfiguracion.setOnItemClickListener((parent, view, position, id) -> {
             switch (position) {
                 case 0:
-                    android.widget.Toast.makeText(MainActivity.this, "Click en: Cambiar URL (Próximamente)", android.widget.Toast.LENGTH_SHORT).show();
+                    mostrarSubmenuListas();
                     break;
                 case 1:
-                    android.widget.Toast.makeText(MainActivity.this, "🔄 Recargando canales...", android.widget.Toast.LENGTH_SHORT).show();
-                    limpiarBuscadorOcultarMenus();
-                    cargarListaDesdeUrl("https://gitlab.com/mortal251/ssiptvarg/-/raw/main/primerajunta/cablearg.m3u?ref_type=heads");
+                    mostrarSubmenuFavoritos();
                     break;
                 case 2:
-                    android.widget.Toast.makeText(MainActivity.this, "BKO IPTV v3.5 - Desarrollado para Android TV", android.widget.Toast.LENGTH_LONG).show();
+                    verificarClaveAdultos();
                     break;
             }
         });
-
-        // 5. MÁGIA AQUÍ: Le inyectamos tu selector para que dibuje el fondo gris y el borde celeste al enfocar
-        listViewConfiguracion.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
     }
-
         private void ejecutarFiltradoEnTiempoReal (String texto){
             String consulta = texto.trim().toLowerCase();
             listaFiltradaCanales.clear();
@@ -1129,5 +1125,70 @@ public class MainActivity extends AppCompatActivity {
             player.release();
             player = null;
         }
+    }
+
+    // ==========================================
+    //       SUBMENÚS DE LA CONFIGURACIÓN
+    // ==========================================
+
+    private void mostrarSubmenuListas() {
+        String[] opciones = {
+                "➕ Añadir Nueva Lista URL",
+                "🔄 Recargar Lista Actual",
+                "❌ Borrar Lista Actual"
+        };
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("📂 Gestión de Listas IPTV")
+                .setItems(opciones, (dialog, which) -> {
+                    if (which == 0) {
+                        android.widget.Toast.makeText(this, "Próximamente: Añadir Lista", android.widget.Toast.LENGTH_SHORT).show();
+                    } else if (which == 1) {
+                        limpiarBuscadorOcultarMenus();
+                        cargarListaDesdeUrl("https://gitlab.com/mortal251/ssiptvarg/-/raw/main/primerajunta/cablearg.m3u?ref_type=heads");
+                    } else if (which == 2) {
+                        android.widget.Toast.makeText(this, "Próximamente: Borrar Lista", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Volver", null)
+                .show();
+    }
+
+    private void mostrarSubmenuFavoritos() {
+        String[] opciones = {
+                "❤️ Ver mis Canales Favoritos",
+                "🗑️ Limpiar todos los Favoritos"
+        };
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("⭐ Administrar Favoritos")
+                .setItems(opciones, (dialog, which) -> {
+                    if (which == 0) {
+                        android.widget.Toast.makeText(this, "Abriendo Favoritos...", android.widget.Toast.LENGTH_SHORT).show();
+                    } else if (which == 1) {
+                        android.widget.Toast.makeText(this, "Favoritos limpiados", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Volver", null)
+                .show();
+    }
+
+    private void verificarClaveAdultos() {
+        android.widget.EditText inputClave = new android.widget.EditText(this);
+        inputClave.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        inputClave.setHint("Por la seguridad de los menores");
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("🔞 Control Parental")
+                .setMessage("Ingrese la clave de acceso:")
+                .setView(inputClave)
+                .setPositiveButton("Ingresar", (dialog, which) -> {
+                    String claveIngresada = inputClave.getText().toString();
+                    if (claveIngresada.equals(claveAdultos)) {
+                        android.widget.Toast.makeText(this, "Acceso concedido al contenido de adultos", android.widget.Toast.LENGTH_SHORT).show();
+                    } else {
+                        android.widget.Toast.makeText(this, "❌ Clave incorrecta", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
     }
 } // <- FIN DEFINITIVO DE TODO EL ARCHIVO
