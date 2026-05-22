@@ -892,24 +892,25 @@ public class MainActivity extends AppCompatActivity {
         // 1. Si presionan la tecla ATRÁS
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (menusVisibles) {
-                // Si hay menús abiertos, simplemente los oculta
                 limpiarBuscadorOcultarMenus();
                 return true;
             } else {
-                // SI LOS MENÚS ESTÁN OCULTOS: Pedimos confirmación para salir
+                if (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE) {
+                    alternarMenuConfiguracion();
+                    return true;
+                }
+
                 new android.app.AlertDialog.Builder(this)
                         .setTitle("Salir de la aplicación")
                         .setMessage("¿Seguro que deseas salir de BKO IPTV?")
                         .setPositiveButton("Sí", (dialog, which) -> {
-                            // Si dice que sí, cierra la app por completo
                             finishAffinity();
                         })
                         .setNegativeButton("No", (dialog, which) -> {
-                            // Si dice que no, el cartel se cierra solo y no hace nada
                             dialog.dismiss();
                         })
                         .show();
-                return true; // Le avisamos al sistema que ya manejamos el botón nosotros
+                return true;
             }
         }
 
@@ -920,7 +921,7 @@ public class MainActivity extends AppCompatActivity {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (event.getRepeatCount() == 0) {
                         tiempoPresionadoOk = System.currentTimeMillis();
-                        yaSeEjecutoLargoOk = false;
+                        yaSeEjecutoLargoOk = false; // Nos aseguramos de que empiece limpio
                     } else {
                         // Si mantiene presionado por más de 1 segundo (1000 ms)
                         if (System.currentTimeMillis() - tiempoPresionadoOk > 1000) {
@@ -943,39 +944,27 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-                return true;
-            }
-
-            // Bloqueamos las flechas para que no hagan nada raro a pantalla completa
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
-                    keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                return true;
+                return true; // Bloqueamos para que no lo agarre el sistema general mientras se presiona
             }
         }
 
         return super.onKeyDown(keyCode, event);
     }
 
+    // 3. SECTOR CLAVE: Método para detectar cuándo el usuario SOLTÓ el botón OK
+// 3. SECTOR CLAVE: Método para detectar cuándo el usuario SOLTÓ el botón OK
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
-        boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
-
-        if (!menusVisibles) {
-            // Manejo del botón OK al soltarlo (Clic Corto)
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                long duracionClick = System.currentTimeMillis() - tiempoPresionadoOk;
-                tiempoPresionadoOk = 0;
-
-                if (!yaSeEjecutoLargoOk && duracionClick < 800) {
-                    // ACCIÓN: Pulsación Corta (Abre el menú izquierdo de canales)
-                    alternarMenuCanales();
-                }
-                return true;
-            }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            yaSeEjecutoLargoOk = false; // ¡Limpiamos la bandera!
+            tiempoPresionadoOk = 0;     // Reseteamos el contador de tiempo
+            return true; // Le avisamos al sistema que ya manejamos la liberación del botón
         }
-
         return super.onKeyUp(keyCode, event);
     }
+
+    // 3. Método nativo oficial: Se dispara ÚNICAMENTE cuando el usuario mantiene presionado el botón OK por más de 1 segundo
+
         private void cargarListaDesdeUrl (String urlM3u){
             new Thread(() -> {
                 try {
@@ -1191,4 +1180,12 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Cancelar", null)
                 .show();
     }
-} // <- FIN DEFINITIVO DE TODO EL ARCHIVO
+
+    // ==========================================
+    //   BOTÓN ATRÁS DEL CONTROL REMOTO (VOLVER)
+    // ==========================================
+
+    }
+
+
+ // <- FIN DEFINITIVO DE TODO EL ARCHIVO
