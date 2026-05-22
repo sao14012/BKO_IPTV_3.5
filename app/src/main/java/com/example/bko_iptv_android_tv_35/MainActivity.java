@@ -93,6 +93,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_LISTAS_JSON = "listas_iptv_pro_json";
     private static final String KEY_ULTIMA_URL = "ultima_url_sintonizada";
     private static final String KEY_FAVORITOS_SET = "favoritos_canales_urls";
+    private static final String KEY_GRUPO_PREDETERMINADO = "grupo_predeterminado_iptv";
+    private static final String KEY_ULTIMO_CANAL_SINTONIZADO = "ultimo_canal_sintonizado_url";
 
     private List<String> nombresDeListasGuardadas = new ArrayList<>();
     private List<String> urlsDeListasGuardadas = new ArrayList<>();
@@ -118,7 +120,6 @@ public class MainActivity extends AppCompatActivity {
         listViewGrupos = findViewById(R.id.list_view_grupos);
         imagenSplash = findViewById(R.id.imagen_splash);
 
-        // === MEJORA: IGUALAR ANCHO DE GRUPOS CON EL DE CANALES ===
         if (listViewCanales != null && listViewGrupos != null) {
             ViewGroup.LayoutParams paramsGrupos = listViewGrupos.getLayoutParams();
             paramsGrupos.width = listViewCanales.getLayoutParams().width;
@@ -241,6 +242,16 @@ public class MainActivity extends AppCompatActivity {
                 listViewCanales.requestFocus();
             });
 
+            listViewGrupos.setOnItemLongClickListener((parent, view1, position, id) -> {
+                String grupoSeleccionado = listaDeGruposVisibles.get(position);
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit()
+                        .putString(KEY_GRUPO_PREDETERMINADO, grupoSeleccionado)
+                        .apply();
+                Toast.makeText(MainActivity.this, "⭐ Grupo predeterminado: " + grupoSeleccionado, Toast.LENGTH_SHORT).show();
+                return true;
+            });
+
             if (inputBuscadorTiempoReal != null) {
                 inputBuscadorTiempoReal.addTextChangedListener(new TextWatcher() {
                     @Override
@@ -277,7 +288,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reproducirCanalEstable(CanalEstructura canal) {
-        if (player == null) return;
+        if (player == null || canal == null) return;
+
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_ULTIMO_CANAL_SINTONIZADO, canal.urlStream)
+                .apply();
 
         DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
         dataSourceFactory.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36");
@@ -377,7 +393,7 @@ public class MainActivity extends AppCompatActivity {
 
                     String[] opcionesAccion = {"✅ Activar y reproducir", "✏️ Editar", "❌ Eliminar"};
                     new AlertDialog.Builder(this)
-                            .setTitle("Opciones: " + textNombreListaCabecera)
+                            .setTitle("Opciones")
                             .setItems(opcionesAccion, (subDialog, opcionIndex) -> {
                                 if (opcionIndex == 0) {
                                     urlListaActualEnUso = urlSeleccionada;
@@ -883,16 +899,22 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 }
 
-                new android.app.AlertDialog.Builder(this)
+                android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
                         .setTitle("Salir de la aplicación")
                         .setMessage("¿Seguro que deseas salir de BKO IPTV?")
-                        .setPositiveButton("Sí", (dialog, which) -> {
+                        .setPositiveButton("Sí", (dialogInterface, which) -> {
                             finishAffinity();
                         })
-                        .setNegativeButton("No", (dialog, which) -> {
-                            dialog.dismiss();
+                        .setNegativeButton("No", (dialogInterface, which) -> {
+                            dialogInterface.dismiss();
                         })
-                        .show();
+                        .create();
+
+                dialog.setOnShowListener(dialogInterface -> {
+                    dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).requestFocus();
+                });
+
+                dialog.show();
                 return true;
             }
         }
@@ -1034,7 +1056,6 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
 
-                    // === MEJORA: ORDENAR ALFABÉTICAMENTE LOS GRUPOS DEL M3U ===
                     List<String> gruposOrdenados = new ArrayList<>(setDeGruposUnicos);
                     Collections.sort(gruposOrdenados, String.CASE_INSENSITIVE_ORDER);
 
@@ -1044,11 +1065,34 @@ public class MainActivity extends AppCompatActivity {
                     listaDeGruposVisibles.addAll(gruposOrdenados);
 
                     runOnUiThread(() -> {
-                        grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
+                        SharedPreferences prefs1 = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+
+                        String grupoPredet = prefs1.getString(KEY_GRUPO_PREDETERMINADO, "[ TODOS LOS CANALES ]");
+                        if (listaDeGruposVisibles.contains(grupoPredet)) {
+                            grupoSeleccionadoActual = grupoPredet;
+                        } else {
+                            grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
+                        }
                         aplicarFiltroDeGrupo(grupoSeleccionadoActual);
 
-                        if (!listaGlobalCanales.isEmpty()) {
-                            reproducirCanalEstable(listaGlobalCanales.get(0));
+                        String ultimoCanalUrl = prefs1.getString(KEY_ULTIMO_CANAL_SINTONIZADO, "");
+                        CanalEstructura canalAIniciar = null;
+
+                        if (!ultimoCanalUrl.isEmpty()) {
+                            for (CanalEstructura c : listaGlobalCanales) {
+                                if (c.urlStream.equals(ultimoCanalUrl)) {
+                                    canalAIniciar = c;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (canalAIniciar == null && !listaGlobalCanales.isEmpty()) {
+                            canalAIniciar = listaGlobalCanales.get(0);
+                        }
+
+                        if (canalAIniciar != null) {
+                            reproducirCanalEstable(canalAIniciar);
                         }
 
                         ArrayAdapter<String> adapterGrupos = new ArrayAdapter<String>(
@@ -1095,10 +1139,6 @@ public class MainActivity extends AppCompatActivity {
             player = null;
         }
     }
-
-// ==========================================
-//       SUBMENÚS DE LA CONFIGURACIÓN
-// ==========================================
 
     private void mostrarSubmenuListas() {
         String[] opcionesPrincipales = {
@@ -1187,4 +1227,4 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Cancelar", null)
                 .show();
     }
-} // <- ESTA LLAVE CIERRA DEFINITIVAMENTE LA CLASE MAINACTIVITY
+}
