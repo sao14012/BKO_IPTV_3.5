@@ -359,10 +359,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarPanelAdministradorListas() {
-        // 1. Cargamos y refrescamos los ArrayLists reales desde tu memoria JSON
         cargarListasDesdeMemoria();
 
-        // Si tu array de URLs guardadas está vacío, avisamos al usuario
         if (urlsDeListasGuardadas.isEmpty()) {
             new AlertDialog.Builder(this)
                     .setTitle("📂 Administrador de Listas")
@@ -373,23 +371,19 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // 2. Convertimos tus ArrayLists existentes en un arreglo de texto para el menú
         String[] nombresMostrar = nombresDeListasGuardadas.toArray(new String[0]);
 
-        // 3. Mostrar el diálogo con las listas reales encontradas en el JSON
         new AlertDialog.Builder(this)
                 .setTitle("📂 Seleccione una Lista")
                 .setItems(nombresMostrar, (dialog, indexSeleccionado) -> {
                     String nombreSeleccionado = nombresDeListasGuardadas.get(indexSeleccionado);
                     String urlSeleccionada = urlsDeListasGuardadas.get(indexSeleccionado);
 
-                    // 4. Submenú de opciones para la lista seleccionada
                     String[] opcionesAccion = {"✅ Activar y reproducir", "✏️ Editar", "❌ Eliminar"};
                     new AlertDialog.Builder(this)
                             .setTitle("Opciones: " + nombreSeleccionado)
                             .setItems(opcionesAccion, (subDialog, opcionIndex) -> {
                                 if (opcionIndex == 0) {
-                                    // --- ACTIVAR Y REPRODUCIR ---
                                     urlListaActualEnUso = urlSeleccionada;
                                     nombreListaActualEnUso = nombreSeleccionado;
                                     getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -399,13 +393,9 @@ public class MainActivity extends AppCompatActivity {
                                     Toast.makeText(this, "Cargando: " + nombreSeleccionado, Toast.LENGTH_SHORT).show();
 
                                 } else if (opcionIndex == 1) {
-                                    // --- EDITAR LISTA ---
-                                    // Llamamos directamente a tu formulario JSON nativo ya existente
                                     formularioEditarLista(indexSeleccionado);
 
                                 } else if (opcionIndex == 2) {
-                                    // --- ELIMINAR LISTA ---
-                                    // Llamamos directamente a tu lógica de borrado JSON nativa ya existente
                                     ejecutarPrimerAvisoBorrar(indexSeleccionado);
                                 }
                             })
@@ -524,7 +514,7 @@ public class MainActivity extends AppCompatActivity {
         inputNombre.setHint("Nombre");
         inputNombre.setFocusable(true);
         inputNombre.setFocusableInTouchMode(true);
-        inputNombre.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT); // Muestra botón "Siguiente"
+        inputNombre.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
         inputNombre.setSingleLine(true);
         layout.addView(inputNombre);
 
@@ -532,7 +522,7 @@ public class MainActivity extends AppCompatActivity {
         inputUrl.setHint("URL m3u");
         inputUrl.setFocusable(true);
         inputUrl.setFocusableInTouchMode(true);
-        inputUrl.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE); // Muestra botón "Listo"
+        inputUrl.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
         inputUrl.setSingleLine(true);
         layout.addView(inputUrl);
 
@@ -562,6 +552,7 @@ public class MainActivity extends AppCompatActivity {
         }
         builder.show();
     }
+
     private String convertirEnlaceGoogleDriveADirecto(String urlDrive) {
         try {
             String idArchivo = "";
@@ -648,26 +639,22 @@ public class MainActivity extends AppCompatActivity {
         if (contenedorMenus != null) contenedorMenus.setVisibility(View.GONE);
         if (listViewCanales != null) listViewCanales.setVisibility(View.GONE);
         if (listViewGrupos != null) listViewGrupos.setVisibility(View.GONE);
-
-        // AGREGAR ESTA LÍNEA AQUÍ ABAJO:
         if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
     }
 
     private void alternarMenuConfiguracion() {
         if (contenedorConfiguracion == null) return;
 
-        // Si el menú izquierdo está abierto, lo cerramos primero para no superponerlos
         if (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE) {
             limpiarBuscadorOcultarMenus();
         }
 
-        // Alternamos la visibilidad del menú de configuración
         if (contenedorConfiguracion.getVisibility() == View.VISIBLE) {
             contenedorConfiguracion.setVisibility(View.GONE);
         } else {
             contenedorConfiguracion.setVisibility(View.VISIBLE);
             if (listViewConfiguracion != null) {
-                listViewConfiguracion.requestFocus(); // Le damos el foco al control remoto
+                listViewConfiguracion.requestFocus();
             }
         }
     }
@@ -675,14 +662,12 @@ public class MainActivity extends AppCompatActivity {
     private void cargarOpcionesConfiguracion() {
         if (listViewConfiguracion == null) return;
 
-        // 1. Opciones principales actualizadas para el menú de Ajustes
+        // --- RECTIFICADO: Quitamos la opción de Administrar Favoritos ---
         String[] opciones = {
                 "📂 Gestión de Listas IPTV",
-                "⭐ Administrar Favoritos",
                 "🔞 Control Parental (Adultos)"
         };
 
-        // 2. Adaptador personalizado para forzar el texto en color blanco
         android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(
                 this,
                 android.R.layout.simple_list_item_1,
@@ -699,88 +684,83 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         listViewConfiguracion.setAdapter(adapter);
-
-        // 2.5 Inyectamos tu selector para que dibuje el borde celeste al enfocar con el control
         listViewConfiguracion.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
 
-        // 3. Escuchamos los clics (Botón OK del control de la TV)
+        // --- RECTIFICADO: Re-mapeamos los clics de los botones de forma directa ---
         listViewConfiguracion.setOnItemClickListener((parent, view, position, id) -> {
             switch (position) {
                 case 0:
                     mostrarSubmenuListas();
                     break;
                 case 1:
-                    mostrarSubmenuFavoritos();
-                    break;
-                case 2:
                     verificarClaveAdultos();
                     break;
             }
         });
     }
-        private void ejecutarFiltradoEnTiempoReal (String texto){
-            String consulta = texto.trim().toLowerCase();
-            listaFiltradaCanales.clear();
 
-            if (consulta.isEmpty()) {
-                if (textNombreListaCabecera != null) {
-                    if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
-                        textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
-                    } else {
-                        textNombreListaCabecera.setText("CATEGORÍA: " + grupoSeleccionadoActual.toUpperCase());
-                    }
-                }
-                for (CanalEstructura canal : listaGlobalCanales) {
-                    if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
-                        listaFiltradaCanales.add(canal);
-                    } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
-                        if (setDeCanalesFavoritos.contains(canal.urlStream)) {
-                            listaFiltradaCanales.add(canal);
-                        }
-                    } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
-                        listaFiltradaCanales.add(canal);
-                    }
-                }
-            } else {
-                if (textNombreListaCabecera != null) {
-                    textNombreListaCabecera.setText("BUSCANDO: " + consulta.toUpperCase());
-                }
-                for (CanalEstructura canal : listaGlobalCanales) {
-                    if (canal.nombreCanal.toLowerCase().contains(consulta)) {
-                        listaFiltradaCanales.add(canal);
-                    }
+    private void ejecutarFiltradoEnTiempoReal(String texto) {
+        String consulta = texto.trim().toLowerCase();
+        listaFiltradaCanales.clear();
+
+        if (consulta.isEmpty()) {
+            if (textNombreListaCabecera != null) {
+                if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
+                    textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
+                } else {
+                    textNombreListaCabecera.setText("CATEGORÍA: " + grupoSeleccionadoActual.toUpperCase());
                 }
             }
-            aplicarFiltroDirectoBuscador();
+            for (CanalEstructura canal : listaGlobalCanales) {
+                if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
+                    listaFiltradaCanales.add(canal);
+                } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
+                    if (setDeCanalesFavoritos.contains(canal.urlStream)) {
+                        listaFiltradaCanales.add(canal);
+                    }
+                } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
+                    listaFiltradaCanales.add(canal);
+                }
+            }
+        } else {
+            if (textNombreListaCabecera != null) {
+                textNombreListaCabecera.setText("BUSCANDO: " + consulta.toUpperCase());
+            }
+            for (CanalEstructura canal : listaGlobalCanales) {
+                if (canal.nombreCanal.toLowerCase().contains(consulta)) {
+                    listaFiltradaCanales.add(canal);
+                }
+            }
         }
+        aplicarFiltroDirectoBuscador();
+    }
 
-        private void mostrarGuiaRapidaComandos () {
-            AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle("📖 Guía de Comandos Remotos");
+    private void mostrarGuiaRapidaComandos() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("📖 Guía de Comandos Remotos");
 
-            StringBuilder mensaje = new StringBuilder();
-            mensaje.append("• Click Corto OK: Abrir menú Canales\n");
-            mensaje.append("• Click Largo OK: Panel Administrador de Listas\n\n");
-            mensaje.append("PANTALLA COMPLETA (Viendo Tele):\n");
-            mensaje.append("• Flecha Izquierda (Corto): Abrir menú Categorías\n");
-            mensaje.append("• Flecha Izquierda (Largo): Abrir esta Guía de Comandos\n");
-            mensaje.append("• Flecha Derecha (Corto): Entrar directo a sección Favoritos\n");
-            mensaje.append("• Flecha Derecha (Largo): ⭐ AGREGAR/QUITAR canal de Favoritos\n");
-            mensaje.append("• Flecha Arriba (Corto): Abrir canales de la sección actual\n");
-            mensaje.append("• Flecha Arriba (Largo): 🔍 Hacer foco en el Buscador Directo\n");
-            mensaje.append("• Flecha Abajo (Corto): Ver Info del canal en reproducción\n\n");
-            mensaje.append("CON MENÚS ABIERTOS:\n");
-            mensaje.append("• Flechas navegan de forma clásica. Flecha Atrás cierra los paneles.");
+        StringBuilder mensaje = new StringBuilder();
+        mensaje.append("• Click Corto OK: Abrir menú Canales\n");
+        mensaje.append("• Click Largo OK: Panel Administrator de Listas\n\n");
+        mensaje.append("PANTALLA COMPLETA (Viendo Tele):\n");
+        mensaje.append("• Flecha Izquierda (Corto): Abrir menú Categorías\n");
+        mensaje.append("• Flecha Izquierda (Largo): Abrir esta Guía de Comandos\n");
+        mensaje.append("• Flecha Derecha (Corto): Entrar directo a sección Favoritos\n");
+        mensaje.append("• Flecha Derecha (Largo): ⭐ AGREGAR/QUITAR canal de Favoritos\n");
+        mensaje.append("• Flecha Arriba (Corto): Abrir canales de la sección actual\n");
+        mensaje.append("• Flecha Arriba (Largo): 🔍 Hacer foco en el Buscador Directo\n");
+        mensaje.append("• Flecha Abajo (Corto): Ver Info del canal en reproducción\n\n");
+        mensaje.append("CON MENÚS ABIERTOS:\n");
+        mensaje.append("• Flechas navegan de forma clásica. Flecha Atrás cierra los paneles.");
 
-            builder.setMessage(mensaje.toString());
-            builder.setPositiveButton("Entendido", null);
-            builder.show();
-        }
+        builder.setMessage(mensaje.toString());
+        builder.setPositiveButton("Entendido", null);
+        builder.show();
+    }
 
     private void alternarFavoritoCanal(CanalEstructura canal) {
         if (canal == null) return;
 
-        // Usamos las variables públicas reales de tu archivo
         String urlId = canal.urlStream;
         String tituloCanal = canal.nombreCanal;
 
@@ -792,170 +772,168 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "⭐ Agregado a Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
         }
 
-        // Guardamos los cambios inmediatamente en el disco
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit().putStringSet(KEY_FAVORITOS_SET, setDeCanalesFavoritos).apply();
 
-        // Refrescamos la lista en pantalla para que pinte o despinte la estrella
         aplicarFiltroDeGrupo(grupoSeleccionadoActual);
     }
-        private void aplicarFiltroDirectoBuscador () {
-            ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
-                    this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
-                @Override
-                public View getView(int position, View convertView, ViewGroup parent) {
-                    LinearLayout filaLayout;
-                    if (convertView == null) {
-                        filaLayout = new LinearLayout(getContext());
-                        filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                        filaLayout.setPadding(30, 35, 30, 35);
-                        filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
-                        ImageView imgLogo = new ImageView(getContext());
-                        imgLogo.setId(View.generateViewId());
-                        LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
-                        lpImg.rightMargin = 25;
-                        imgLogo.setLayoutParams(lpImg);
-                        filaLayout.addView(imgLogo);
+    private void aplicarFiltroDirectoBuscador() {
+        ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
+                this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                LinearLayout filaLayout;
+                if (convertView == null) {
+                    filaLayout = new LinearLayout(getContext());
+                    filaLayout.setOrientation(LinearLayout.HORIZONTAL);
+                    filaLayout.setPadding(30, 35, 30, 35);
+                    filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
-                        TextView textNombre = new TextView(getContext());
-                        textNombre.setId(View.generateViewId());
-                        textNombre.setTextColor(android.graphics.Color.WHITE);
-                        textNombre.setTextSize(16);
-                        filaLayout.addView(textNombre);
-                    } else {
-                        filaLayout = (LinearLayout) convertView;
-                    }
+                    ImageView imgLogo = new ImageView(getContext());
+                    imgLogo.setId(View.generateViewId());
+                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
+                    lpImg.rightMargin = 25;
+                    imgLogo.setLayoutParams(lpImg);
+                    filaLayout.addView(imgLogo);
 
-                    ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
-                    TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
-
-                    CanalEstructura actual = getItem(position);
-                    nameView.setText(actual.nombreCanal);
-
-                    if (setDeCanalesFavoritos.contains(actual.urlStream)) {
-                        nameView.setText("⭐ " + actual.nombreCanal);
-                    }
-
-                    if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
-                        logoView.setVisibility(View.VISIBLE);
-                        logoView.setTag(actual.urlLogo);
-                        new Thread(() -> {
-                            try {
-                                java.io.InputStream is = new java.net.URL((String) logoView.getTag()).openStream();
-                                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                                runOnUiThread(() -> {
-                                    if (logoView.getTag().equals(actual.urlLogo))
-                                        logoView.setImageBitmap(bmp);
-                                });
-                            } catch (Exception ignored) {
-                            }
-                        }).start();
-                    } else {
-                        logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
-                    }
-                    return filaLayout;
+                    TextView textNombre = new TextView(getContext());
+                    textNombre.setId(View.generateViewId());
+                    textNombre.setTextColor(android.graphics.Color.WHITE);
+                    textNombre.setTextSize(16);
+                    filaLayout.addView(textNombre);
+                } else {
+                    filaLayout = (LinearLayout) convertView;
                 }
-            };
-            listViewCanales.setAdapter(adapter);
-            listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
-            if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
-        }
 
-        private void aplicarFiltroDeGrupo (String group){
-            listaFiltradaCanales.clear();
+                ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
+                TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
 
-            for (CanalEstructura canal : listaGlobalCanales) {
-                if (group.equals("[ TODOS LOS CANALES ]")) {
-                    listaFiltradaCanales.add(canal);
-                } else if (group.equals("⭐ [ FAVORITOS ]")) {
-                    if (setDeCanalesFavoritos.contains(canal.urlStream)) {
-                        listaFiltradaCanales.add(canal);
-                    }
-                } else if (canal.grupoCanal.equalsIgnoreCase(group)) {
-                    listaFiltradaCanales.add(canal);
+                CanalEstructura actual = getItem(position);
+                nameView.setText(actual.nombreCanal);
+
+                if (setDeCanalesFavoritos.contains(actual.urlStream)) {
+                    nameView.setText("⭐ " + actual.nombreCanal);
                 }
+
+                if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
+                    logoView.setVisibility(View.VISIBLE);
+                    logoView.setTag(actual.urlLogo);
+                    new Thread(() -> {
+                        try {
+                            java.io.InputStream is = new java.net.URL((String) logoView.getTag()).openStream();
+                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
+                            runOnUiThread(() -> {
+                                if (logoView.getTag().equals(actual.urlLogo))
+                                    logoView.setImageBitmap(bmp);
+                            });
+                        } catch (Exception ignored) {
+                        }
+                    }).start();
+                } else {
+                    logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
+                }
+                return filaLayout;
             }
+        };
+        listViewCanales.setAdapter(adapter);
+        listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
+        if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
+    }
 
-            ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
-                    this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
-                @Override
-                public View getView(int position, View convertView, ViewGroup parent) {
-                    LinearLayout filaLayout;
-                    if (convertView == null) {
-                        filaLayout = new LinearLayout(getContext());
-                        filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                        filaLayout.setPadding(30, 35, 30, 35);
-                        filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
+    private void aplicarFiltroDeGrupo(String group) {
+        listaFiltradaCanales.clear();
 
-                        ImageView imgLogo = new ImageView(getContext());
-                        imgLogo.setId(View.generateViewId());
-                        LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
-                        lpImg.rightMargin = 25;
-                        imgLogo.setLayoutParams(lpImg);
-                        filaLayout.addView(imgLogo);
-
-                        TextView textNombre = new TextView(getContext());
-                        textNombre.setId(View.generateViewId());
-                        textNombre.setTextColor(android.graphics.Color.WHITE);
-                        textNombre.setTextSize(16);
-                        filaLayout.addView(textNombre);
-                    } else {
-                        filaLayout = (LinearLayout) convertView;
-                    }
-
-                    ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
-                    TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
-
-                    CanalEstructura actual = getItem(position);
-                    nameView.setText(actual.nombreCanal);
-
-                    if (setDeCanalesFavoritos.contains(actual.urlStream)) {
-                        nameView.setText("⭐ " + actual.nombreCanal);
-                    }
-
-                    if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
-                        logoView.setVisibility(View.VISIBLE);
-                        logoView.setTag(actual.urlLogo);
-                        new Thread(() -> {
-                            try {
-                                java.io.InputStream is = new java.net.URL((String) logoView.getTag()).openStream();
-                                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                                runOnUiThread(() -> {
-                                    if (logoView.getTag().equals(actual.urlLogo))
-                                        logoView.setImageBitmap(bmp);
-                                });
-                            } catch (Exception ignored) {
-                                runOnUiThread(() -> logoView.setImageResource(android.R.drawable.ic_menu_slideshow));
-                            }
-                        }).start();
-                    } else {
-                        logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
-                    }
-
-                    return filaLayout;
+        for (CanalEstructura canal : listaGlobalCanales) {
+            if (group.equals("[ TODOS LOS CANALES ]")) {
+                listaFiltradaCanales.add(canal);
+            } else if (group.equals("⭐ [ FAVORITOS ]")) {
+                if (setDeCanalesFavoritos.contains(canal.urlStream)) {
+                    listaFiltradaCanales.add(canal);
                 }
-            };
-
-            listViewCanales.setAdapter(adapter);
-            listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
-            if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
+            } else if (canal.grupoCanal.equalsIgnoreCase(group)) {
+                listaFiltradaCanales.add(canal);
+            }
         }
 
-        private void mostrarCartelConfirmarSalida () {
-            AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle("Cerrar Aplicación");
-            builder.setMessage("¿Desea cerrar la app?");
-            builder.setPositiveButton("SÍ", (dialog, which) -> finish());
-            builder.setNegativeButton("NO", null);
-            builder.show();
-        }
+        ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
+                this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                LinearLayout filaLayout;
+                if (convertView == null) {
+                    filaLayout = new LinearLayout(getContext());
+                    filaLayout.setOrientation(LinearLayout.HORIZONTAL);
+                    filaLayout.setPadding(30, 35, 30, 35);
+                    filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+                    ImageView imgLogo = new ImageView(getContext());
+                    imgLogo.setId(View.generateViewId());
+                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
+                    lpImg.rightMargin = 25;
+                    imgLogo.setLayoutParams(lpImg);
+                    filaLayout.addView(imgLogo);
+
+                    TextView textNombre = new TextView(getContext());
+                    textNombre.setId(View.generateViewId());
+                    textNombre.setTextColor(android.graphics.Color.WHITE);
+                    textNombre.setTextSize(16);
+                    filaLayout.addView(textNombre);
+                } else {
+                    filaLayout = (LinearLayout) convertView;
+                }
+
+                ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
+                TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
+
+                CanalEstructura actual = getItem(position);
+                nameView.setText(actual.nombreCanal);
+
+                if (setDeCanalesFavoritos.contains(actual.urlStream)) {
+                    nameView.setText("⭐ " + actual.nombreCanal);
+                }
+
+                if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
+                    logoView.setVisibility(View.VISIBLE);
+                    logoView.setTag(actual.urlLogo);
+                    new Thread(() -> {
+                        try {
+                            java.io.InputStream is = new java.net.URL((String) logoView.getTag()).openStream();
+                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
+                            runOnUiThread(() -> {
+                                if (logoView.getTag().equals(actual.urlLogo))
+                                    logoView.setImageBitmap(bmp);
+                            });
+                        } catch (Exception ignored) {
+                            runOnUiThread(() -> logoView.setImageResource(android.R.drawable.ic_menu_slideshow));
+                        }
+                    }).start();
+                } else {
+                    logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
+                }
+
+                return filaLayout;
+            }
+        };
+
+        listViewCanales.setAdapter(adapter);
+        listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
+        if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
+    }
+
+    private void mostrarCartelConfirmarSalida() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Cerrar Aplicación");
+        builder.setMessage("¿Desea cerrar la app?");
+        builder.setPositiveButton("SÍ", (dialog, which) -> finish());
+        builder.setNegativeButton("NO", null);
+        builder.show();
+    }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
 
-        // 1. Si presionan la tecla ATRÁS
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (menusVisibles) {
                 limpiarBuscadorOcultarMenus();
@@ -980,16 +958,13 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // 2. Si los menús están OCULTOS (viendo tele a pantalla completa)
         if (!menusVisibles) {
-            // Manejo del botón OK (Pulsación Larga en vivo)
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (event.getRepeatCount() == 0) {
                         tiempoPresionadoOk = System.currentTimeMillis();
-                        yaSeEjecutoLargoOk = false; // Nos aseguramos de que empiece limpio
+                        yaSeEjecutoLargoOk = false;
                     } else {
-                        // Si mantiene presionado por más de 1 segundo (1000 ms)
                         if (System.currentTimeMillis() - tiempoPresionadoOk > 1000) {
                             if (!yaSeEjecutoLargoOk) {
                                 yaSeEjecutoLargoOk = true;
@@ -1010,161 +985,157 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-                return true; // Bloqueamos para que no lo agarre el sistema general mientras se presiona
+                return true;
             }
         }
 
         return super.onKeyDown(keyCode, event);
     }
 
-    // 3. SECTOR CLAVE: Método para detectar cuándo el usuario SOLTÓ el botón OK
-// 3. SECTOR CLAVE: Método para detectar cuándo el usuario SOLTÓ el botón OK
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            yaSeEjecutoLargoOk = false; // ¡Limpiamos la bandera!
-            tiempoPresionadoOk = 0;     // Reseteamos el contador de tiempo
-            return true; // Le avisamos al sistema que ya manejamos la liberación del botón
+            yaSeEjecutoLargoOk = false;
+            tiempoPresionadoOk = 0;
+            return true;
         }
         return super.onKeyUp(keyCode, event);
     }
 
-    // 3. Método nativo oficial: Se dispara ÚNICAMENTE cuando el usuario mantiene presionado el botón OK por más de 1 segundo
+    private void cargarListaDesdeUrl(String urlM3u) {
+        new Thread(() -> {
+            try {
+                URL url = new URL(urlM3u);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(15000);
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0");
 
-        private void cargarListaDesdeUrl (String urlM3u){
-            new Thread(() -> {
-                try {
-                    URL url = new URL(urlM3u);
-                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                    connection.setRequestMethod("GET");
-                    connection.setConnectTimeout(15000);
-                    connection.setReadTimeout(15000);
-                    connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                String linea;
 
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                    String linea;
+                String nombreCanal = "Canal Libre";
+                String grupoCanal = "Otros";
+                String urlLogo = "";
+                String ultimaLicenciaDRM = "";
 
-                    String nombreCanal = "Canal Libre";
-                    String grupoCanal = "Otros";
-                    String urlLogo = "";
-                    String ultimaLicenciaDRM = "";
+                listaGlobalCanales.clear();
+                Set<String> setDeGruposUnicos = new HashSet<>();
 
-                    listaGlobalCanales.clear();
-                    Set<String> setDeGruposUnicos = new HashSet<>();
+                while ((linea = reader.readLine()) != null) {
+                    linea = linea.trim();
+                    if (linea.isEmpty()) continue;
 
-                    while ((linea = reader.readLine()) != null) {
-                        linea = linea.trim();
-                        if (linea.isEmpty()) continue;
+                    if (linea.contains("license_key")) {
+                        ultimaLicenciaDRM = linea.split("=")[1].trim();
+                    }
 
-                        if (linea.contains("license_key")) {
-                            ultimaLicenciaDRM = linea.split("=")[1].trim();
+                    if (linea.startsWith("#EXTINF:")) {
+                        if (linea.contains("tvg-logo=\"")) {
+                            int inicioLogo = linea.indexOf("tvg-logo=\"") + 10;
+                            int finLogo = linea.indexOf("\"", inicioLogo);
+                            if (finLogo != -1)
+                                urlLogo = linea.substring(inicioLogo, finLogo).trim();
                         }
 
-                        if (linea.startsWith("#EXTINF:")) {
-                            if (linea.contains("tvg-logo=\"")) {
-                                int inicioLogo = linea.indexOf("tvg-logo=\"") + 10;
-                                int finLogo = linea.indexOf("\"", inicioLogo);
-                                if (finLogo != -1)
-                                    urlLogo = linea.substring(inicioLogo, finLogo).trim();
-                            }
-
-                            if (linea.contains("group-title=\"")) {
-                                int inicio = linea.indexOf("group-title=\"") + 13;
-                                int fin = linea.indexOf("\"", inicio);
-                                if (fin != -1) grupoCanal = linea.substring(inicio, fin).trim();
-                            } else {
-                                grupoCanal = "Otros";
-                            }
-
-                            int comaIndex = linea.lastIndexOf(",");
-                            if (comaIndex != -1) {
-                                nombreCanal = linea.substring(comaIndex + 1).trim();
-                            } else {
-                                nombreCanal = "Canal Sin Nombre";
-                            }
-                        } else if (linea.startsWith("http://") || linea.startsWith("https://")) {
-
-                            String tipoMime = null;
-                            if (linea.contains(".mpd") || linea.contains(".mpd?")) {
-                                tipoMime = MimeTypes.APPLICATION_MPD;
-                            } else if (linea.contains(".m3u8") || linea.contains(".m3u8?")) {
-                                tipoMime = MimeTypes.APPLICATION_M3U8;
-                            }
-
-                            CanalEstructura nuevoCanal = new CanalEstructura();
-                            nuevoCanal.urlStream = linea;
-                            nuevoCanal.licenseKey = ultimaLicenciaDRM;
-                            nuevoCanal.nombreCanal = nombreCanal;
-                            nuevoCanal.grupoCanal = grupoCanal;
-                            nuevoCanal.urlLogo = urlLogo;
-                            nuevoCanal.tipoMime = tipoMime;
-
-                            String limpio = nombreCanal.toLowerCase()
-                                    .replaceAll("^[^a-zA-Z0-9áéíóúñ]+", "")
-                                    .trim();
-                            nuevoCanal.nombreOrdenado = limpio.isEmpty() ? nombreCanal.toLowerCase() : limpio;
-
-                            listaGlobalCanales.add(nuevoCanal);
-                            if (!grupoCanal.isEmpty()) setDeGruposUnicos.add(grupoCanal);
-
-                            nombreCanal = "Canal Libre";
+                        if (linea.contains("group-title=\"")) {
+                            int inicio = linea.indexOf("group-title=\"") + 13;
+                            int fin = linea.indexOf("\"", inicio);
+                            if (fin != -1) grupoCanal = linea.substring(inicio, fin).trim();
+                        } else {
                             grupoCanal = "Otros";
-                            urlLogo = "";
-                            ultimaLicenciaDRM = "";
                         }
+
+                        int comaIndex = linea.lastIndexOf(",");
+                        if (comaIndex != -1) {
+                            nombreCanal = linea.substring(comaIndex + 1).trim();
+                        } else {
+                            nombreCanal = "Canal Sin Nombre";
+                        }
+                    } else if (linea.startsWith("http://") || linea.startsWith("https://")) {
+
+                        String tipoMime = null;
+                        if (linea.contains(".mpd") || linea.contains(".mpd?")) {
+                            tipoMime = MimeTypes.APPLICATION_MPD;
+                        } else if (linea.contains(".m3u8") || linea.contains(".m3u8?")) {
+                            tipoMime = MimeTypes.APPLICATION_M3U8;
+                        }
+
+                        CanalEstructura nuevoCanal = new CanalEstructura();
+                        nuevoCanal.urlStream = linea;
+                        nuevoCanal.licenseKey = ultimaLicenciaDRM;
+                        nuevoCanal.nombreCanal = nombreCanal;
+                        nuevoCanal.grupoCanal = grupoCanal;
+                        nuevoCanal.urlLogo = urlLogo;
+                        nuevoCanal.tipoMime = tipoMime;
+
+                        String limpio = nombreCanal.toLowerCase()
+                                .replaceAll("^[^a-zA-Z0-9áéíóúñ]+", "")
+                                .trim();
+                        nuevoCanal.nombreOrdenado = limpio.isEmpty() ? nombreCanal.toLowerCase() : limpio;
+
+                        listaGlobalCanales.add(nuevoCanal);
+                        if (!grupoCanal.isEmpty()) setDeGruposUnicos.add(grupoCanal);
+
+                        nombreCanal = "Canal Libre";
+                        grupoCanal = "Otros";
+                        urlLogo = "";
+                        ultimaLicenciaDRM = "";
                     }
-                    reader.close();
-                    connection.disconnect();
+                }
+                reader.close();
+                connection.disconnect();
 
-                    if (!listaGlobalCanales.isEmpty()) {
-                        Collections.sort(listaGlobalCanales, new Comparator<CanalEstructura>() {
-                            @Override
-                            public int compare(CanalEstructura c1, CanalEstructura c2) {
-                                return c1.nombreOrdenado.compareTo(c2.nombreOrdenado);
-                            }
-                        });
+                if (!listaGlobalCanales.isEmpty()) {
+                    Collections.sort(listaGlobalCanales, new Comparator<CanalEstructura>() {
+                        @Override
+                        public int compare(CanalEstructura c1, CanalEstructura c2) {
+                            return c1.nombreOrdenado.compareTo(c2.nombreOrdenado);
+                        }
+                    });
 
-                        listaDeGruposVisibles.clear();
-                        listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
-                        listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
-                        listaDeGruposVisibles.addAll(setDeGruposUnicos);
+                    listaDeGruposVisibles.clear();
+                    listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
+                    listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
+                    listaDeGruposVisibles.addAll(setDeGruposUnicos);
 
-                        runOnUiThread(() -> {
-                            grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
-                            aplicarFiltroDeGrupo(grupoSeleccionadoActual);
-
-                            if (!listaGlobalCanales.isEmpty()) {
-                                reproducirCanalEstable(listaGlobalCanales.get(0));
-                            }
-
-                            ArrayAdapter<String> adapterGrupos = new ArrayAdapter<String>(
-                                    MainActivity.this, android.R.layout.simple_list_item_1, listaDeGruposVisibles) {
-                                @Override
-                                public View getView(int position, View convertView, ViewGroup parent) {
-                                    View view = super.getView(position, convertView, parent);
-                                    TextView text = view.findViewById(android.R.id.text1);
-                                    String itemText = getItem(position);
-                                    if (itemText.contains("FAVORITOS")) {
-                                        text.setTextColor(android.graphics.Color.CYAN);
-                                    } else {
-                                        text.setTextColor(android.graphics.Color.YELLOW);
-                                    }
-                                    text.setPadding(30, 40, 30, 40);
-                                    return view;
-                                }
-                            };
-                            listViewGrupos.setAdapter(adapterGrupos);
-                            listViewGrupos.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
-                        });
-                    }
-                } catch (Exception e) {
                     runOnUiThread(() -> {
-                        Toast.makeText(MainActivity.this, "Error de red al procesar la lista.", Toast.LENGTH_LONG).show();
-                        mostrarPanelAdministradorListas();
+                        grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
+                        aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+
+                        if (!listaGlobalCanales.isEmpty()) {
+                            reproducirCanalEstable(listaGlobalCanales.get(0));
+                        }
+
+                        ArrayAdapter<String> adapterGrupos = new ArrayAdapter<String>(
+                                MainActivity.this, android.R.layout.simple_list_item_1, listaDeGruposVisibles) {
+                            @Override
+                            public View getView(int position, View convertView, ViewGroup parent) {
+                                View view = super.getView(position, convertView, parent);
+                                TextView text = view.findViewById(android.R.id.text1);
+                                String itemText = getItem(position);
+                                if (itemText.contains("FAVORITOS")) {
+                                    text.setTextColor(android.graphics.Color.CYAN);
+                                } else {
+                                    text.setTextColor(android.graphics.Color.YELLOW);
+                                }
+                                text.setPadding(30, 40, 30, 40);
+                                return view;
+                            }
+                        };
+                        listViewGrupos.setAdapter(adapterGrupos);
+                        listViewGrupos.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
                     });
                 }
-            }).start(); // <- ESTA LLAVE Y PARÉNTESIS CIERRAN EL THREAD
-        } // <- ESTA LLAVE CIERRA EL MÉTODO cargarListaDesdeUrl
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this, "Error de red al procesar la lista.", Toast.LENGTH_LONG).show();
+                    mostrarPanelAdministradorListas();
+                });
+            }
+        }).start();
+    }
 
     @Override
     protected void onStop() {
@@ -1181,16 +1152,12 @@ public class MainActivity extends AppCompatActivity {
             player = null;
         }
     }
-// ==========================================
-//       SUBMENÚS DE LA CONFIGURACIÓN
-// ==========================================
 
-    // ==========================================
+// ==========================================
 //       SUBMENÚS DE LA CONFIGURACIÓN
 // ==========================================
 
     private void mostrarSubmenuListas() {
-        // 1. Definimos las opciones principales del Administrador
         String[] opcionesPrincipales = {
                 "➕ Agregar Nueva Lista",
                 "✅ Seleccionar y Activar Lista",
@@ -1201,15 +1168,12 @@ public class MainActivity extends AppCompatActivity {
         new android.app.AlertDialog.Builder(this)
                 .setTitle("📂 Gestión de Listas IPTV")
                 .setItems(opcionesPrincipales, (dialog, which) -> {
-                    // Nos aseguramos de tener la memoria fresca cargada desde el JSON
                     cargarListasDesdeMemoria();
 
                     if (which == 0) {
-                        // --- OPCON 1: AGREGAR NUEVA LISTA ---
                         solicitarNuevaLista(false);
 
                     } else if (which == 1) {
-                        // --- OPCIÓN 2: SELECCIONAR Y ACTIVAR ---
                         if (urlsDeListasGuardadas.isEmpty()) {
                             android.widget.Toast.makeText(this, "No tienes listas guardadas para activar", android.widget.Toast.LENGTH_SHORT).show();
                             return;
@@ -1232,7 +1196,6 @@ public class MainActivity extends AppCompatActivity {
                                 .show();
 
                     } else if (which == 2) {
-                        // --- OPCIÓN 3: EDITAR LISTA ---
                         if (urlsDeListasGuardadas.isEmpty()) {
                             android.widget.Toast.makeText(this, "No tienes listas guardadas para editar", android.widget.Toast.LENGTH_SHORT).show();
                             return;
@@ -1245,7 +1208,6 @@ public class MainActivity extends AppCompatActivity {
                                 .show();
 
                     } else if (which == 3) {
-                        // --- OPCIÓN 4: ELIMINAR LISTA ---
                         if (urlsDeListasGuardadas.isEmpty()) {
                             android.widget.Toast.makeText(this, "No tienes listas guardadas para eliminar", android.widget.Toast.LENGTH_SHORT).show();
                             return;
@@ -1256,24 +1218,6 @@ public class MainActivity extends AppCompatActivity {
                                 .setItems(nombres, (d, index) -> ejecutarPrimerAvisoBorrar(index))
                                 .setNegativeButton("Atrás", (d, w) -> mostrarSubmenuListas())
                                 .show();
-                    }
-                })
-                .setNegativeButton("Volver", null)
-                .show();
-    }
-
-    private void mostrarSubmenuFavoritos() {
-        String[] opciones = {
-                "❤️ Ver mis Canales Favoritos",
-                "🗑️ Limpiar todos los Favoritos"
-        };
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("⭐ Administrar Favoritos")
-                .setItems(opciones, (dialog, which) -> {
-                    if (which == 0) {
-                        android.widget.Toast.makeText(this, "Abriendo Favoritos...", android.widget.Toast.LENGTH_SHORT).show();
-                    } else if (which == 1) {
-                        android.widget.Toast.makeText(this, "Favoritos limpiados", android.widget.Toast.LENGTH_SHORT).show();
                     }
                 })
                 .setNegativeButton("Volver", null)
@@ -1300,12 +1244,4 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Cancelar", null)
                 .show();
     }
-
-    // ==========================================
-    //   BOTÓN ATRÁS DEL CONTROL REMOTO (VOLVER)
-    // ==========================================
-
-    }
-
-
- // <- FIN DEFINITIVO DE TODO EL ARCHIVO
+}
