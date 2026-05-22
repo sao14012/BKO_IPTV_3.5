@@ -635,7 +635,10 @@ public class MainActivity extends AppCompatActivity {
                     break;
             }
         });
-    } // <- CIERRA EL MÉTODO PERFECTAMENTE
+
+        // 5. MÁGIA AQUÍ: Le inyectamos tu selector para que dibuje el fondo gris y el borde celeste al enfocar
+        listViewConfiguracion.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
+    }
 
         private void ejecutarFiltradoEnTiempoReal (String texto){
             String consulta = texto.trim().toLowerCase();
@@ -775,6 +778,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             };
             listViewCanales.setAdapter(adapter);
+            listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
         }
 
         private void aplicarFiltroDeGrupo (String group){
@@ -853,6 +857,7 @@ public class MainActivity extends AppCompatActivity {
             };
 
             listViewCanales.setAdapter(adapter);
+            listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
         }
 
         private void mostrarCartelConfirmarSalida () {
@@ -1062,6 +1067,7 @@ public class MainActivity extends AppCompatActivity {
                                 }
                             };
                             listViewGrupos.setAdapter(adapterGrupos);
+                            listViewGrupos.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
                         });
                     }
                 } catch (Exception e) {
