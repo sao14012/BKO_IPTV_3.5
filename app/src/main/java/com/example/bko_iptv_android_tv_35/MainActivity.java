@@ -465,10 +465,18 @@ public class MainActivity extends AppCompatActivity {
 
         final EditText inputNombre = new EditText(this);
         inputNombre.setHint("Nombre");
+        inputNombre.setFocusable(true);
+        inputNombre.setFocusableInTouchMode(true);
+        inputNombre.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT); // Muestra botón "Siguiente"
+        inputNombre.setSingleLine(true);
         layout.addView(inputNombre);
 
         final EditText inputUrl = new EditText(this);
         inputUrl.setHint("URL m3u");
+        inputUrl.setFocusable(true);
+        inputUrl.setFocusableInTouchMode(true);
+        inputUrl.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE); // Muestra botón "Listo"
+        inputUrl.setSingleLine(true);
         layout.addView(inputUrl);
 
         builder.setView(layout);
@@ -497,7 +505,6 @@ public class MainActivity extends AppCompatActivity {
         }
         builder.show();
     }
-
     private String convertirEnlaceGoogleDriveADirecto(String urlDrive) {
         try {
             String idArchivo = "";
