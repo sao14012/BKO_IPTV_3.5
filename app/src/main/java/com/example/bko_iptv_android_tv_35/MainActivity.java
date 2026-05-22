@@ -1130,7 +1130,7 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("📂 Gestión de Listas IPTV")
                 .setItems(opciones, (dialog, which) -> {
                     if (which == 0) {
-                        android.widget.Toast.makeText(this, "Próximamente: Añadir Lista", android.widget.Toast.LENGTH_SHORT).show();
+                        solicitarNuevaLista(false);
                     } else if (which == 1) {
                         limpiarBuscadorOcultarMenus();
                         cargarListaDesdeUrl("https://gitlab.com/mortal251/ssiptvarg/-/raw/main/primerajunta/cablearg.m3u?ref_type=heads");
