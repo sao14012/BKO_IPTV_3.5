@@ -212,6 +212,28 @@ public class MainActivity extends AppCompatActivity {
                 reproducirCanalEstable(seleccionado);
                 limpiarBuscadorOcultarMenus();
             });
+            // --- DETECTOR HIBRIDO DE PULSACION LARGA (Para Celular y TV) ---
+            listViewCanales.setOnItemLongClickListener((parent, view1, position, id) -> {
+                CanalEstructura canalSeleccionado = listaFiltradaCanales.get(position);
+
+                if (canalSeleccionado != null) {
+                    // Revisamos si ya es favorito usando la variable publica urlStream
+                    String mensajeAccion = setDeCanalesFavoritos.contains(canalSeleccionado.urlStream)
+                            ? "❌ Quitar de Favoritos"
+                            : "⭐ Añadir a Favoritos";
+
+                    new AlertDialog.Builder(this)
+                            .setTitle(canalSeleccionado.nombreCanal) // Variable publica nombreCanal
+                            .setItems(new String[]{mensajeAccion}, (dialog, which) -> {
+                                if (which == 0) {
+                                    alternarFavoritoCanal(canalSeleccionado);
+                                }
+                            })
+                            .setNegativeButton("Cancelar", null)
+                            .show();
+                }
+                return true; // Le avisamos a Android que ya procesamos la pulsacion larga
+            });
 
             listViewGrupos.setOnItemClickListener((parent, view, position, id) -> {
                 if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
@@ -755,26 +777,28 @@ public class MainActivity extends AppCompatActivity {
             builder.show();
         }
 
-        private void alternarFavoritoCanalActual () {
-            if (player != null && player.getCurrentMediaItem() != null) {
-                String urlIdActual = player.getCurrentMediaItem().mediaId;
-                CharSequence tituloCanal = player.getCurrentMediaItem().mediaMetadata.title;
+    private void alternarFavoritoCanal(CanalEstructura canal) {
+        if (canal == null) return;
 
-                if (setDeCanalesFavoritos.contains(urlIdActual)) {
-                    setDeCanalesFavoritos.remove(urlIdActual);
-                    Toast.makeText(this, "❌ Quitado de Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
-                } else {
-                    setDeCanalesFavoritos.add(urlIdActual);
-                    Toast.makeText(this, "⭐ Agregado a Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
-                }
+        // Usamos las variables públicas reales de tu archivo
+        String urlId = canal.urlStream;
+        String tituloCanal = canal.nombreCanal;
 
-                SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                prefs.edit().putStringSet(KEY_FAVORITOS_SET, setDeCanalesFavoritos).apply();
-
-                aplicarFiltroDeGrupo(grupoSeleccionadoActual);
-            }
+        if (setDeCanalesFavoritos.contains(urlId)) {
+            setDeCanalesFavoritos.remove(urlId);
+            Toast.makeText(this, "❌ Quitado de Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
+        } else {
+            setDeCanalesFavoritos.add(urlId);
+            Toast.makeText(this, "⭐ Agregado a Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
         }
 
+        // Guardamos los cambios inmediatamente en el disco
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putStringSet(KEY_FAVORITOS_SET, setDeCanalesFavoritos).apply();
+
+        // Refrescamos la lista en pantalla para que pinte o despinte la estrella
+        aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+    }
         private void aplicarFiltroDirectoBuscador () {
             ArrayAdapter<CanalEstructura> adapter = new ArrayAdapter<CanalEstructura>(
                     this, android.R.layout.simple_list_item_1, listaFiltradaCanales) {
