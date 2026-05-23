@@ -50,6 +50,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -653,6 +654,12 @@ public class MainActivity extends AppCompatActivity {
         if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
     }
 
+    private String normalizarTexto(String texto) {
+        if (texto == null) return "";
+        String normalizado = Normalizer.normalize(texto, Normalizer.Form.NFD);
+        return normalizado.replaceAll("\\p{InCombiningDiacriticalMarks}+", "").toLowerCase();
+    }
+
     private void alternarMenuConfiguracion() {
         if (contenedorConfiguracion == null) return;
 
@@ -709,10 +716,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void ejecutarFiltradoEnTiempoReal(String texto) {
-        String consulta = texto.trim().toLowerCase();
+        String consultaOriginal = texto.trim();
+        String consultaNormalizada = normalizarTexto(consultaOriginal);
         listaFiltradaCanales.clear();
 
-        if (consulta.isEmpty()) {
+        if (consultaOriginal.isEmpty()) {
             if (textNombreListaCabecera != null) {
                 if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
                     textNombreListaCabecera.setText("SECCIÓN: FAVORITOS");
@@ -735,11 +743,24 @@ public class MainActivity extends AppCompatActivity {
             }
         } else {
             if (textNombreListaCabecera != null) {
-                textNombreListaCabecera.setText("BUSCANDO: " + consulta.toUpperCase());
+                String sufijo = grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]") ? "" : " EN " + grupoSeleccionadoActual.toUpperCase();
+                textNombreListaCabecera.setText("BUSCANDO" + sufijo + ": " + consultaOriginal.toUpperCase());
             }
+            
+            Set<String> urlsAgregadas = new HashSet<>();
             for (CanalEstructura canal : listaGlobalCanales) {
-                if (canal.nombreCanal.toLowerCase().contains(consulta)) {
-                    listaFiltradaCanales.add(canal);
+                String nombreNormalizado = normalizarTexto(canal.nombreCanal);
+                if (nombreNormalizado.contains(consultaNormalizada)) {
+                    if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
+                        listaFiltradaCanales.add(canal);
+                    } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
+                        if (setDeCanalesFavoritos.contains(canal.urlStream) && !urlsAgregadas.contains(canal.urlStream)) {
+                            listaFiltradaCanales.add(canal);
+                            urlsAgregadas.add(canal.urlStream);
+                        }
+                    } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
+                        listaFiltradaCanales.add(canal);
+                    }
                 }
             }
         }
