@@ -139,10 +139,25 @@ public class MainActivity extends AppCompatActivity {
 
         if (inputBuscadorTiempoReal != null) {
             inputBuscadorTiempoReal.setOnEditorActionListener((v, actionId, event) -> {
-                if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_SEARCH || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+                if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_SEARCH || 
+                    (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+                    
+                    // 1. Cerrar teclado inmediatamente
                     InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                    if (imm != null) imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+                    if (imm != null) {
+                        imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+                    }
+                    
+                    // 2. Forzar que el foco salga del buscador
                     v.clearFocus();
+                    
+                    // 3. Obligar al foco a ir a la lista de CANALES (la de la derecha)
+                    if (listViewCanales != null) {
+                        listViewCanales.requestFocus();
+                        if (!listaFiltradaCanales.isEmpty()) {
+                            listViewCanales.setSelection(0);
+                        }
+                    }
                     return true;
                 }
                 return false;
@@ -608,7 +623,26 @@ public class MainActivity extends AppCompatActivity {
                 contenedorMenus.setVisibility(View.VISIBLE);
                 listViewGrupos.setVisibility(View.VISIBLE);
                 listViewCanales.setVisibility(View.VISIBLE);
-                listViewGrupos.requestFocus(); // Empezamos en los grupos
+
+                // Intentar encontrar el canal que se está reproduciendo actualmente
+                String urlActual = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .getString(KEY_ULTIMO_CANAL_SINTONIZADO, "");
+                
+                int indice = -1;
+                for (int i = 0; i < listaFiltradaCanales.size(); i++) {
+                    if (listaFiltradaCanales.get(i).urlStream.equals(urlActual)) {
+                        indice = i;
+                        break;
+                    }
+                }
+
+                if (indice != -1) {
+                    listViewCanales.setSelection(indice);
+                    listViewCanales.requestFocus();
+                } else {
+                    // Si no está en la lista actual, enfocamos los grupos
+                    listViewGrupos.requestFocus();
+                }
             }
         }
     }
@@ -686,12 +720,14 @@ public class MainActivity extends AppCompatActivity {
                     textNombreListaCabecera.setText("CATEGORÍA: " + grupoSeleccionadoActual.toUpperCase());
                 }
             }
+            Set<String> urlsAgregadas = new HashSet<>();
             for (CanalEstructura canal : listaGlobalCanales) {
                 if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
                     listaFiltradaCanales.add(canal);
                 } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
-                    if (setDeCanalesFavoritos.contains(canal.urlStream)) {
+                    if (setDeCanalesFavoritos.contains(canal.urlStream) && !urlsAgregadas.contains(canal.urlStream)) {
                         listaFiltradaCanales.add(canal);
+                        urlsAgregadas.add(canal.urlStream);
                     }
                 } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
                     listaFiltradaCanales.add(canal);
@@ -713,6 +749,7 @@ public class MainActivity extends AppCompatActivity {
     private void alternarFavoritoCanal(CanalEstructura canal) {
         if (canal == null) return;
 
+        int posicionActual = listViewCanales.getSelectedItemPosition();
         String urlId = canal.urlStream;
         String tituloCanal = canal.nombreCanal;
 
@@ -728,6 +765,12 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit().putStringSet(KEY_FAVORITOS_SET, setDeCanalesFavoritos).apply();
 
         aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+        
+        // Restaurar la posición después del refresco
+        listViewCanales.post(() -> {
+            listViewCanales.setSelection(posicionActual);
+            listViewCanales.requestFocus();
+        });
     }
 
     private void aplicarFiltroDirectoBuscador() {
@@ -809,13 +852,15 @@ public class MainActivity extends AppCompatActivity {
 
     private void aplicarFiltroDeGrupo(String group) {
         listaFiltradaCanales.clear();
+        Set<String> urlsAgregadas = new HashSet<>();
 
         for (CanalEstructura canal : listaGlobalCanales) {
             if (group.equals("[ TODOS LOS CANALES ]")) {
                 listaFiltradaCanales.add(canal);
             } else if (group.equals("⭐ [ FAVORITOS ]")) {
-                if (setDeCanalesFavoritos.contains(canal.urlStream)) {
+                if (setDeCanalesFavoritos.contains(canal.urlStream) && !urlsAgregadas.contains(canal.urlStream)) {
                     listaFiltradaCanales.add(canal);
+                    urlsAgregadas.add(canal.urlStream);
                 }
             } else if (canal.grupoCanal.equalsIgnoreCase(group)) {
                 listaFiltradaCanales.add(canal);
