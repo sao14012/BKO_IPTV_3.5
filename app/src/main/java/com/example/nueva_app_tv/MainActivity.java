@@ -65,10 +65,13 @@ import java.util.Set;
 public class MainActivity extends AppCompatActivity {
 
     private StyledPlayerView playerView;
+    private StyledPlayerView playerViewMini;
+    private View contenedorMiniPlayer;
     private ListView listViewCanales;
     private ListView listViewGrupos;
     private android.widget.Button btnVolverGrupos;
     private ExoPlayer player;
+    private ExoPlayer playerMini;
     private View imagenSplash;
     private LinearLayout contenedorMenus;
     private TextView textNombreListaCabecera;
@@ -111,7 +114,10 @@ public class MainActivity extends AppCompatActivity {
     private final Handler reintentoHandler = new Handler(Looper.getMainLooper());
     private String urlListaActualEnUso = "";
     private CanalEstructura canalActualReproduciendo;
+    private CanalEstructura canalMiniReproduciendo;
     private GestureDetector gestureDetector;
+    private GestureDetector miniPlayerGestureDetector;
+    private boolean menuParaPantallaChica = false;
 
     private long tiempoPresionadoOk = 0;
     private boolean yaSeEjecutoLargoOk = false;
@@ -126,6 +132,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         playerView = findViewById(R.id.player_view_firme);
+        playerViewMini = findViewById(R.id.player_view_mini);
+        contenedorMiniPlayer = findViewById(R.id.contenedor_mini_player);
         listViewCanales = findViewById(R.id.list_view_canales);
         listViewGrupos = findViewById(R.id.list_view_grupos);
         imagenSplash = findViewById(R.id.imagen_splash);
@@ -202,6 +210,22 @@ public class MainActivity extends AppCompatActivity {
             playerView.setUseController(false);
             player.setRepeatMode(Player.REPEAT_MODE_OFF);
 
+            playerMini = new ExoPlayer.Builder(this).setLoadControl(loadControl).build();
+            playerViewMini.setPlayer(playerMini);
+            playerViewMini.setUseController(false);
+            playerMini.setVolume(0f); // Pantalla chica sin sonido
+            playerMini.setRepeatMode(Player.REPEAT_MODE_OFF);
+
+            playerMini.addListener(new Player.Listener() {
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    if (playerMini != null) {
+                        playerMini.prepare();
+                        playerMini.play();
+                    }
+                }
+            });
+
             player.addListener(new Player.Listener() {
                 @Override
                 public void onPlayerError(PlaybackException error) {
@@ -229,21 +253,22 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-            playerView.setOnClickListener(v -> alternarMenuCanales());
-            playerView.setOnLongClickListener(v -> {
-                alternarMenuConfiguracion();
-                return true;
-            });
+            playerView.setKeepScreenOn(true);
 
             gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+                @Override
+                public boolean onDown(MotionEvent e) {
+                    return true;
+                }
+
                 @Override
                 public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
                     if (Math.abs(velocityY) > Math.abs(velocityX)) {
                         if (velocityY < -500) { // Swipe Up
-                            cambiarCanalSiguiente();
+                            cambiarCanalSiguiente(player);
                             return true;
                         } else if (velocityY > 500) { // Swipe Down
-                            cambiarCanalAnterior();
+                            cambiarCanalAnterior(player);
                             return true;
                         }
                     }
@@ -252,7 +277,23 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public boolean onSingleTapConfirmed(MotionEvent e) {
+                    menuParaPantallaChica = false;
                     alternarMenuCanales();
+                    return true;
+                }
+
+                @Override
+                public boolean onDoubleTap(MotionEvent e) {
+                    if (canalActualReproduciendo != null) {
+                        // 1. Mover canal actual a la pantalla chica (silenciado)
+                        reproducirCanalEstable(canalActualReproduciendo, playerMini);
+                        
+                        // 2. Abrir el menú para elegir el nuevo canal (para la grande)
+                        menuParaPantallaChica = false;
+                        alternarMenuCanales();
+                        
+                        Toast.makeText(MainActivity.this, "📺 Multiview: Seleccione nuevo canal", Toast.LENGTH_SHORT).show();
+                    }
                     return true;
                 }
 
@@ -262,6 +303,48 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
+            miniPlayerGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+                @Override
+                public boolean onDown(MotionEvent e) {
+                    return true;
+                }
+
+                @Override
+                public boolean onDoubleTap(MotionEvent e) {
+                    cerrarMiniPlayer();
+                    return true;
+                }
+
+                @Override
+                public boolean onSingleTapConfirmed(MotionEvent e) {
+                    menuParaPantallaChica = true;
+                    alternarMenuCanales();
+                    Toast.makeText(MainActivity.this, "📺 Cambiando canal de pantalla chica", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
+
+                @Override
+                public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                    if (Math.abs(velocityY) > Math.abs(velocityX)) {
+                        if (velocityY < -500) { // Swipe Up
+                            cambiarCanalSiguiente(playerMini);
+                            return true;
+                        } else if (velocityY > 500) { // Swipe Down
+                            cambiarCanalAnterior(playerMini);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            });
+
+            if (contenedorMiniPlayer != null) {
+                contenedorMiniPlayer.setOnTouchListener((v, event) -> {
+                    miniPlayerGestureDetector.onTouchEvent(event);
+                    return true;
+                });
+            }
+
             playerView.setOnTouchListener((v, event) -> {
                 gestureDetector.onTouchEvent(event);
                 return true;
@@ -269,7 +352,11 @@ public class MainActivity extends AppCompatActivity {
 
             listViewCanales.setOnItemClickListener((parent, view, position, id) -> {
                 CanalEstructura seleccionado = listaFiltradaCanales.get(position);
-                reproducirCanalEstable(seleccionado);
+                if (menuParaPantallaChica) {
+                    reproducirCanalEstable(seleccionado, playerMini);
+                } else {
+                    reproducirCanalEstable(seleccionado, player);
+                }
                 limpiarBuscadorOcultarMenus();
             });
 
@@ -361,7 +448,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reproducirCanalEstable(final CanalEstructura canal) {
-        if (player == null || canal == null) return;
+        reproducirCanalEstable(canal, player);
+    }
+
+    private void reproducirCanalEstable(final CanalEstructura canal, final ExoPlayer targetPlayer) {
+        if (targetPlayer == null || canal == null) return;
 
         if (esCanalAdulto(canal)) {
             final EditText input = new EditText(this);
@@ -376,7 +467,7 @@ public class MainActivity extends AppCompatActivity {
                     .setPositiveButton("Desbloquear", (dialog, which) -> {
                         String pass = input.getText().toString();
                         if (pass.equals(claveAdultos)) {
-                            continuarReproduccion(canal);
+                            continuarReproduccion(canal, targetPlayer);
                         } else {
                             Toast.makeText(this, "❌ Clave incorrecta", Toast.LENGTH_SHORT).show();
                         }
@@ -384,16 +475,23 @@ public class MainActivity extends AppCompatActivity {
                     .setNegativeButton("Cerrar", null)
                     .show();
         } else {
-            continuarReproduccion(canal);
+            continuarReproduccion(canal, targetPlayer);
         }
     }
 
-    private void continuarReproduccion(CanalEstructura canal) {
-        this.canalActualReproduciendo = canal;
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_ULTIMO_CANAL_SINTONIZADO, canal.urlStream)
-                .apply();
+    private void continuarReproduccion(CanalEstructura canal, ExoPlayer targetPlayer) {
+        if (targetPlayer == player) {
+            this.canalActualReproduciendo = canal;
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_ULTIMO_CANAL_SINTONIZADO, canal.urlStream)
+                    .apply();
+        } else {
+            this.canalMiniReproduciendo = canal;
+            if (contenedorMiniPlayer != null) {
+                contenedorMiniPlayer.setVisibility(View.VISIBLE);
+            }
+        }
 
         DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
         dataSourceFactory.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36");
@@ -438,9 +536,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        player.setMediaSource(mediaSource);
-        player.prepare();
-        player.play();
+        targetPlayer.setMediaSource(mediaSource);
+        targetPlayer.prepare();
+        targetPlayer.play();
     }
 
     private String convertHexToBase64Url(String hex) {
@@ -451,11 +549,25 @@ public class MainActivity extends AppCompatActivity {
         return android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP | android.util.Base64.URL_SAFE | android.util.Base64.NO_PADDING);
     }
 
-    private void cambiarCanalSiguiente() {
-        if (listaFiltradaCanales.isEmpty() || canalActualReproduciendo == null) return;
+    private void cerrarMiniPlayer() {
+        if (playerMini != null) {
+            playerMini.stop();
+            canalMiniReproduciendo = null;
+        }
+        if (contenedorMiniPlayer != null) {
+            contenedorMiniPlayer.setVisibility(View.GONE);
+        }
+        Toast.makeText(this, "✖ Mini Pantalla Cerrada", Toast.LENGTH_SHORT).show();
+    }
+
+    private void cambiarCanalSiguiente(ExoPlayer targetPlayer) {
+        if (listaFiltradaCanales.isEmpty()) return;
+        CanalEstructura refCanal = (targetPlayer == player) ? canalActualReproduciendo : canalMiniReproduciendo;
+        if (refCanal == null) return;
+
         int index = -1;
         for (int i = 0; i < listaFiltradaCanales.size(); i++) {
-            if (listaFiltradaCanales.get(i).urlStream.equals(canalActualReproduciendo.urlStream)) {
+            if (listaFiltradaCanales.get(i).urlStream.equals(refCanal.urlStream)) {
                 index = i;
                 break;
             }
@@ -463,16 +575,20 @@ public class MainActivity extends AppCompatActivity {
         if (index != -1) {
             int nextIndex = (index + 1) % listaFiltradaCanales.size();
             CanalEstructura next = listaFiltradaCanales.get(nextIndex);
-            Toast.makeText(this, "▲ Siguiente: " + next.nombreCanal, Toast.LENGTH_SHORT).show();
-            reproducirCanalEstable(next);
+            String prefijo = (targetPlayer == player) ? "▲ " : "▲ Mini: ";
+            Toast.makeText(this, prefijo + next.nombreCanal, Toast.LENGTH_SHORT).show();
+            reproducirCanalEstable(next, targetPlayer);
         }
     }
 
-    private void cambiarCanalAnterior() {
-        if (listaFiltradaCanales.isEmpty() || canalActualReproduciendo == null) return;
+    private void cambiarCanalAnterior(ExoPlayer targetPlayer) {
+        if (listaFiltradaCanales.isEmpty()) return;
+        CanalEstructura refCanal = (targetPlayer == player) ? canalActualReproduciendo : canalMiniReproduciendo;
+        if (refCanal == null) return;
+
         int index = -1;
         for (int i = 0; i < listaFiltradaCanales.size(); i++) {
-            if (listaFiltradaCanales.get(i).urlStream.equals(canalActualReproduciendo.urlStream)) {
+            if (listaFiltradaCanales.get(i).urlStream.equals(refCanal.urlStream)) {
                 index = i;
                 break;
             }
@@ -480,8 +596,9 @@ public class MainActivity extends AppCompatActivity {
         if (index != -1) {
             int prevIndex = (index - 1 + listaFiltradaCanales.size()) % listaFiltradaCanales.size();
             CanalEstructura prev = listaFiltradaCanales.get(prevIndex);
-            Toast.makeText(this, "▼ Anterior: " + prev.nombreCanal, Toast.LENGTH_SHORT).show();
-            reproducirCanalEstable(prev);
+            String prefijo = (targetPlayer == player) ? "▼ " : "▼ Mini: ";
+            Toast.makeText(this, prefijo + prev.nombreCanal, Toast.LENGTH_SHORT).show();
+            reproducirCanalEstable(prev, targetPlayer);
         }
     }
 
@@ -904,7 +1021,8 @@ public class MainActivity extends AppCompatActivity {
         guia.append("📱 MÓVIL (PANTALLA):\n");
         guia.append("👆 TOQUE SIMPLE: Abre el menú de canales.\n");
         guia.append("☝️ TOQUE LARGO: Abre este menú de Ajustes.\n");
-        guia.append("↕️ SWIPE ARRIBA/ABAJO: Cambiar de canal.\n\n");
+        guia.append("↕️ SWIPE ARRIBA/ABAJO: Cambiar canal (Grande).\n");
+        guia.append("↕️ SWIPE EN MINI: Cambiar canal (Mini).\n\n");
         
         guia.append("📺 TV / CONTROL REMOTO:\n");
         guia.append("🔵 OK / CENTER: Abre el menú de canales.\n");
@@ -1216,11 +1334,11 @@ public class MainActivity extends AppCompatActivity {
 
         if (!menusVisibles) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                cambiarCanalAnterior();
+                cambiarCanalAnterior(player);
                 return true;
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                cambiarCanalSiguiente();
+                cambiarCanalSiguiente(player);
                 return true;
             }
 
@@ -1437,6 +1555,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onStop() {
         super.onStop();
         if (player != null) player.pause();
+        if (playerMini != null) playerMini.pause();
     }
 
     @Override
@@ -1455,6 +1574,10 @@ public class MainActivity extends AppCompatActivity {
         if (player != null) {
             player.release();
             player = null;
+        }
+        if (playerMini != null) {
+            playerMini.release();
+            playerMini = null;
         }
     }
 
