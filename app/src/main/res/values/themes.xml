@@ -1,4 +1,4 @@
 <resources>
 
-    <style name="Theme.Bko_iptv_android_tv_35" parent="@style/Theme.Leanback" />
+    <style name="Theme.NuevaAppTv" parent="@style/Theme.Leanback" />
 </resources>

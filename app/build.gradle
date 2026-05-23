@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'com.example.bko_iptv_android_tv_35'
+    namespace 'com.example.nueva_app_tv'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.example.bko_iptv_android_tv_35"
+        applicationId "com.example.nueva_app_tv"
         minSdk 21
         targetSdk 34
         versionCode 1

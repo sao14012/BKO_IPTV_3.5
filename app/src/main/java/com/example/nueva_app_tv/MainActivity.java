@@ -1,4 +1,4 @@
-package com.example.bko_iptv_android_tv_35;
+package com.example.nueva_app_tv;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -25,6 +25,8 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.DefaultLoadControl;
 import com.google.android.exoplayer2.ExoPlayer;
@@ -133,19 +135,7 @@ public class MainActivity extends AppCompatActivity {
         listViewConfiguracion = findViewById(R.id.list_view_configuracion);
         cargarOpcionesConfiguracion();
 
-        btnVolverGrupos = findViewById(R.id.btnVolverGrupos);
-
-        if (btnVolverGrupos != null) {
-            btnVolverGrupos.setOnClickListener(v -> {
-                if (listViewCanales != null) listViewCanales.setVisibility(View.GONE);
-                btnVolverGrupos.setVisibility(View.GONE);
-
-                if (listViewGrupos != null) {
-                    listViewGrupos.setVisibility(View.VISIBLE);
-                    listViewGrupos.requestFocus();
-                }
-            });
-        }
+        // btnVolverGrupos ya no es necesario en el diseño de dos columnas
 
         if (inputBuscadorTiempoReal != null) {
             inputBuscadorTiempoReal.setOnEditorActionListener((v, actionId, event) -> {
@@ -232,15 +222,14 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             });
 
-            listViewGrupos.setOnItemClickListener((parent, view, position, id) -> {
-                if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
-                grupoSeleccionadoActual = listaDeGruposVisibles.get(position);
-                aplicarFiltroDeGrupo(grupoSeleccionadoActual);
-
-                listViewGrupos.setVisibility(View.GONE);
-                listViewCanales.setVisibility(View.VISIBLE);
-                listViewCanales.requestFocus();
-            });
+        listViewGrupos.setOnItemClickListener((parent, view, position, id) -> {
+            if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
+            grupoSeleccionadoActual = listaDeGruposVisibles.get(position);
+            aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+            
+            // Ahora simplemente pasamos el foco a la lista de canales
+            listViewCanales.requestFocus();
+        });
 
             listViewGrupos.setOnItemLongClickListener((parent, view1, position, id) -> {
                 String grupoSeleccionado = listaDeGruposVisibles.get(position);
@@ -617,8 +606,9 @@ public class MainActivity extends AppCompatActivity {
                     textNombreListaCabecera.setText("LISTA: " + nombreListaActualEnUso.toUpperCase());
                 }
                 contenedorMenus.setVisibility(View.VISIBLE);
+                listViewGrupos.setVisibility(View.VISIBLE);
                 listViewCanales.setVisibility(View.VISIBLE);
-                listViewCanales.requestFocus();
+                listViewGrupos.requestFocus(); // Empezamos en los grupos
             }
         }
     }
@@ -626,8 +616,6 @@ public class MainActivity extends AppCompatActivity {
     private void limpiarBuscadorOcultarMenus() {
         if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
         if (contenedorMenus != null) contenedorMenus.setVisibility(View.GONE);
-        if (listViewCanales != null) listViewCanales.setVisibility(View.GONE);
-        if (listViewGrupos != null) listViewGrupos.setVisibility(View.GONE);
         if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
     }
 
@@ -751,30 +739,50 @@ public class MainActivity extends AppCompatActivity {
                 if (convertView == null) {
                     filaLayout = new LinearLayout(getContext());
                     filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                    filaLayout.setPadding(30, 35, 30, 35);
+                    filaLayout.setPadding(30, 10, 30, 10);
                     filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
                     ImageView imgLogo = new ImageView(getContext());
                     imgLogo.setId(View.generateViewId());
-                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
+                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(65, 65);
                     lpImg.rightMargin = 25;
                     imgLogo.setLayoutParams(lpImg);
+                    imgLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
                     filaLayout.addView(imgLogo);
+
+                    LinearLayout textContainer = new LinearLayout(getContext());
+                    textContainer.setOrientation(LinearLayout.VERTICAL);
+                    textContainer.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
 
                     TextView textNombre = new TextView(getContext());
                     textNombre.setId(View.generateViewId());
                     textNombre.setTextColor(android.graphics.Color.WHITE);
                     textNombre.setTextSize(16);
-                    filaLayout.addView(textNombre);
+                    textNombre.setSingleLine(true);
+                    textNombre.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    textContainer.addView(textNombre);
+
+                    TextView textGrupo = new TextView(getContext());
+                    textGrupo.setId(View.generateViewId());
+                    textGrupo.setTextColor(android.graphics.Color.parseColor("#FFD700")); // Dorado/Amarillo
+                    textGrupo.setTextSize(11);
+                    textGrupo.setSingleLine(true);
+                    textGrupo.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    textContainer.addView(textGrupo);
+
+                    filaLayout.addView(textContainer);
                 } else {
                     filaLayout = (LinearLayout) convertView;
                 }
 
-                ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
-                TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
+                ImageView logoView = (ImageView) filaLayout.getChildAt(0);
+                LinearLayout textContainer = (LinearLayout) filaLayout.getChildAt(1);
+                TextView nameView = (TextView) textContainer.getChildAt(0);
+                TextView groupView = (TextView) textContainer.getChildAt(1);
 
                 CanalEstructura actual = getItem(position);
                 nameView.setText(actual.nombreCanal);
+                groupView.setText("» " + actual.grupoCanal);
 
                 if (setDeCanalesFavoritos.contains(actual.urlStream)) {
                     nameView.setText("⭐ " + actual.nombreCanal);
@@ -782,18 +790,12 @@ public class MainActivity extends AppCompatActivity {
 
                 if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
                     logoView.setVisibility(View.VISIBLE);
-                    logoView.setTag(actual.urlLogo);
-                    new Thread(() -> {
-                        try {
-                            java.io.InputStream is = new java.net.URL((String) logoView.getTag()).openStream();
-                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                            runOnUiThread(() -> {
-                                if (logoView.getTag().equals(actual.urlLogo))
-                                    logoView.setImageBitmap(bmp);
-                            });
-                        } catch (Exception ignored) {
-                        }
-                    }).start();
+                    Glide.with(getContext())
+                            .load(actual.urlLogo)
+                            .placeholder(android.R.drawable.ic_menu_slideshow)
+                            .error(android.R.drawable.ic_menu_slideshow)
+                            .diskCacheStrategy(DiskCacheStrategy.ALL)
+                            .into(logoView);
                 } else {
                     logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
                 }
@@ -802,7 +804,7 @@ public class MainActivity extends AppCompatActivity {
         };
         listViewCanales.setAdapter(adapter);
         listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
-        if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
+        // Botón volver eliminado
     }
 
     private void aplicarFiltroDeGrupo(String group) {
@@ -828,30 +830,50 @@ public class MainActivity extends AppCompatActivity {
                 if (convertView == null) {
                     filaLayout = new LinearLayout(getContext());
                     filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                    filaLayout.setPadding(30, 35, 30, 35);
+                    filaLayout.setPadding(30, 10, 30, 10);
                     filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
                     ImageView imgLogo = new ImageView(getContext());
                     imgLogo.setId(View.generateViewId());
-                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(75, 75);
+                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(65, 65);
                     lpImg.rightMargin = 25;
                     imgLogo.setLayoutParams(lpImg);
+                    imgLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
                     filaLayout.addView(imgLogo);
+
+                    LinearLayout textContainer = new LinearLayout(getContext());
+                    textContainer.setOrientation(LinearLayout.VERTICAL);
+                    textContainer.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
 
                     TextView textNombre = new TextView(getContext());
                     textNombre.setId(View.generateViewId());
                     textNombre.setTextColor(android.graphics.Color.WHITE);
                     textNombre.setTextSize(16);
-                    filaLayout.addView(textNombre);
+                    textNombre.setSingleLine(true);
+                    textNombre.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    textContainer.addView(textNombre);
+
+                    TextView textGrupo = new TextView(getContext());
+                    textGrupo.setId(View.generateViewId());
+                    textGrupo.setTextColor(android.graphics.Color.parseColor("#FFD700")); // Dorado/Amarillo
+                    textGrupo.setTextSize(11);
+                    textGrupo.setSingleLine(true);
+                    textGrupo.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    textContainer.addView(textGrupo);
+
+                    filaLayout.addView(textContainer);
                 } else {
                     filaLayout = (LinearLayout) convertView;
                 }
 
-                ImageView logoView = filaLayout.findViewById(filaLayout.getChildAt(0).getId());
-                TextView nameView = filaLayout.findViewById(filaLayout.getChildAt(1).getId());
+                ImageView logoView = (ImageView) filaLayout.getChildAt(0);
+                LinearLayout textContainer = (LinearLayout) filaLayout.getChildAt(1);
+                TextView nameView = (TextView) textContainer.getChildAt(0);
+                TextView groupView = (TextView) textContainer.getChildAt(1);
 
                 CanalEstructura actual = getItem(position);
                 nameView.setText(actual.nombreCanal);
+                groupView.setText("» " + actual.grupoCanal);
 
                 if (setDeCanalesFavoritos.contains(actual.urlStream)) {
                     nameView.setText("⭐ " + actual.nombreCanal);
@@ -859,19 +881,12 @@ public class MainActivity extends AppCompatActivity {
 
                 if (actual.urlLogo != null && !actual.urlLogo.isEmpty()) {
                     logoView.setVisibility(View.VISIBLE);
-                    logoView.setTag(actual.urlLogo);
-                    new Thread(() -> {
-                        try {
-                            java.io.InputStream is = new java.net.URL((String) logoView.getTag()).openStream();
-                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                            runOnUiThread(() -> {
-                                if (logoView.getTag().equals(actual.urlLogo))
-                                    logoView.setImageBitmap(bmp);
-                            });
-                        } catch (Exception ignored) {
-                            runOnUiThread(() -> logoView.setImageResource(android.R.drawable.ic_menu_slideshow));
-                        }
-                    }).start();
+                    Glide.with(getContext())
+                            .load(actual.urlLogo)
+                            .placeholder(android.R.drawable.ic_menu_slideshow)
+                            .error(android.R.drawable.ic_menu_slideshow)
+                            .diskCacheStrategy(DiskCacheStrategy.ALL)
+                            .into(logoView);
                 } else {
                     logoView.setImageResource(android.R.drawable.ic_menu_slideshow);
                 }
@@ -882,7 +897,7 @@ public class MainActivity extends AppCompatActivity {
 
         listViewCanales.setAdapter(adapter);
         listViewCanales.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
-        if (btnVolverGrupos != null) btnVolverGrupos.setVisibility(View.VISIBLE);
+        // Botón volver eliminado
     }
 
     @Override
