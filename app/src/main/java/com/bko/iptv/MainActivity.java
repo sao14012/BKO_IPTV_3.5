@@ -1,4 +1,4 @@
-package com.example.nueva_app_tv;
+package com.bko.iptv;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -118,6 +118,7 @@ public class MainActivity extends AppCompatActivity {
     private GestureDetector gestureDetector;
     private GestureDetector miniPlayerGestureDetector;
     private boolean menuParaPantallaChica = false;
+    private int contadorErroresReproduccion = 0;
 
     private long tiempoPresionadoOk = 0;
     private boolean yaSeEjecutoLargoOk = false;
@@ -176,7 +177,7 @@ public class MainActivity extends AppCompatActivity {
         playerView.setKeepScreenOn(true);
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        setDeCanalesFavoritos = prefs.getStringSet(KEY_FAVORITOS_SET, new HashSet<>());
+        setDeCanalesFavoritos = new HashSet<>(prefs.getStringSet(KEY_FAVORITOS_SET, new HashSet<>()));
         claveAdultos = prefs.getString(KEY_CLAVE_ADULTOS, "0000");
         mostrarContenidoAdulto = prefs.getBoolean(KEY_MOSTRAR_ADULTOS, false);
 
@@ -228,10 +229,26 @@ public class MainActivity extends AppCompatActivity {
 
             player.addListener(new Player.Listener() {
                 @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_READY) {
+                        contadorErroresReproduccion = 0;
+                    }
+                }
+
+                @Override
                 public void onPlayerError(PlaybackException error) {
+                    contadorErroresReproduccion++;
+                    
+                    if (contadorErroresReproduccion >= 3) {
+                        reintentoHandler.removeCallbacksAndMessages(null);
+                        mostrarDialogoCanalCaido();
+                        contadorErroresReproduccion = 0;
+                        return;
+                    }
+
                     Throwable cause = error.getCause();
                     String msg = cause != null ? cause.getMessage() : error.getErrorCodeName();
-                    Toast.makeText(MainActivity.this, "Fallo de señal (" + msg + "). Reconectando...", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, "Fallo de señal (" + msg + "). Reintento " + contadorErroresReproduccion + "/3", Toast.LENGTH_SHORT).show();
 
                     if (player != null) {
                         reintentoHandler.removeCallbacksAndMessages(null);
@@ -364,7 +381,7 @@ public class MainActivity extends AppCompatActivity {
                 CanalEstructura canalSeleccionado = listaFiltradaCanales.get(position);
 
                 if (canalSeleccionado != null) {
-                    String mensajeAccion = setDeCanalesFavoritos.contains(canalSeleccionado.urlStream)
+                    String mensajeAccion = setDeCanalesFavoritos.contains(generarKeyCanal(canalSeleccionado))
                             ? "❌ Quitar de Favoritos"
                             : "⭐ Añadir a Favoritos";
 
@@ -433,6 +450,23 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Toast.makeText(this, "Error al iniciar el reproductor", Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void mostrarDialogoCanalCaido() {
+        new AlertDialog.Builder(this)
+                .setTitle("⚠️ CANAL SIN SEÑAL")
+                .setMessage("No se ha podido conectar con el canal seleccionado.\n\n¿Deseas abrir la lista para elegir otro canal?")
+                .setCancelable(false)
+                .setPositiveButton("VER CANALES", (dialog, which) -> {
+                    alternarMenuCanales();
+                })
+                .setNegativeButton("REINTENTAR", (dialog, which) -> {
+                    if (player != null) {
+                        player.prepare();
+                        player.play();
+                    }
+                })
+                .show();
     }
 
     private boolean esGrupoAdulto(String grupo) {
@@ -1019,10 +1053,12 @@ public class MainActivity extends AppCompatActivity {
     private void mostrarGuiaControles() {
         StringBuilder guia = new StringBuilder();
         guia.append("📱 MÓVIL (PANTALLA):\n");
-        guia.append("👆 TOQUE SIMPLE: Abre el menú de canales.\n");
-        guia.append("☝️ TOQUE LARGO: Abre este menú de Ajustes.\n");
-        guia.append("↕️ SWIPE ARRIBA/ABAJO: Cambiar canal (Grande).\n");
-        guia.append("↕️ SWIPE EN MINI: Cambiar canal (Mini).\n\n");
+        guia.append("👆 TOQUE SIMPLE: Menú de canales (Grande).\n");
+        guia.append("✌️ DOBLE TOQUE: Activar Multiview (Pasa actual a mini).\n");
+        guia.append("🤏 TOQUE EN MINI: Cambiar canal de pantalla chica.\n");
+        guia.append("❌ DOBLE TOQUE EN MINI: Cerrar pantalla chica.\n");
+        guia.append("↕️ SWIPE ARRIBA/ABAJO: Cambiar canal (Grande o Mini).\n");
+        guia.append("☝️ TOQUE LARGO: Abre este menú de Ajustes.\n\n");
         
         guia.append("📺 TV / CONTROL REMOTO:\n");
         guia.append("🔵 OK / CENTER: Abre el menú de canales.\n");
@@ -1061,9 +1097,10 @@ public class MainActivity extends AppCompatActivity {
                 if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
                     listaFiltradaCanales.add(canal);
                 } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
-                    if (setDeCanalesFavoritos.contains(canal.urlStream) && !urlsAgregadas.contains(canal.urlStream)) {
+                    String uniqueId = generarKeyCanal(canal);
+                    if (setDeCanalesFavoritos.contains(uniqueId) && !urlsAgregadas.contains(uniqueId)) {
                         listaFiltradaCanales.add(canal);
-                        urlsAgregadas.add(canal.urlStream);
+                        urlsAgregadas.add(uniqueId);
                     }
                 } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
                     listaFiltradaCanales.add(canal);
@@ -1084,9 +1121,10 @@ public class MainActivity extends AppCompatActivity {
                     if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
                         listaFiltradaCanales.add(canal);
                     } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
-                        if (setDeCanalesFavoritos.contains(canal.urlStream) && !urlsAgregadas.contains(canal.urlStream)) {
+                        String uniqueId = generarKeyCanal(canal);
+                        if (setDeCanalesFavoritos.contains(uniqueId) && !urlsAgregadas.contains(uniqueId)) {
                             listaFiltradaCanales.add(canal);
-                            urlsAgregadas.add(canal.urlStream);
+                            urlsAgregadas.add(uniqueId);
                         }
                     } else if (canal.grupoCanal.equalsIgnoreCase(grupoSeleccionadoActual)) {
                         listaFiltradaCanales.add(canal);
@@ -1097,18 +1135,28 @@ public class MainActivity extends AppCompatActivity {
         aplicarFiltroDirectoBuscador();
     }
 
+    private String generarKeyCanal(CanalEstructura canal) {
+        if (canal == null) return "";
+        String urlLimpia = canal.urlStream != null ? canal.urlStream : "";
+        if (urlLimpia.contains("?")) {
+            urlLimpia = urlLimpia.substring(0, urlLimpia.indexOf("?"));
+        }
+        // Combinamos nombre y url limpia para que sea un ID único y estable
+        return canal.nombreCanal + "|" + urlLimpia;
+    }
+
     private void alternarFavoritoCanal(CanalEstructura canal) {
         if (canal == null) return;
 
         int posicionActual = listViewCanales.getSelectedItemPosition();
-        String urlId = canal.urlStream;
+        String uniqueId = generarKeyCanal(canal);
         String tituloCanal = canal.nombreCanal;
 
-        if (setDeCanalesFavoritos.contains(urlId)) {
-            setDeCanalesFavoritos.remove(urlId);
+        if (setDeCanalesFavoritos.contains(uniqueId)) {
+            setDeCanalesFavoritos.remove(uniqueId);
             Toast.makeText(this, "❌ Quitado de Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
         } else {
-            setDeCanalesFavoritos.add(urlId);
+            setDeCanalesFavoritos.add(uniqueId);
             Toast.makeText(this, "⭐ Agregado a Favoritos: " + tituloCanal, Toast.LENGTH_SHORT).show();
         }
 
@@ -1178,7 +1226,7 @@ public class MainActivity extends AppCompatActivity {
                 nameView.setText(actual.nombreCanal);
                 groupView.setText("» " + actual.grupoCanal);
 
-                if (setDeCanalesFavoritos.contains(actual.urlStream)) {
+                if (setDeCanalesFavoritos.contains(generarKeyCanal(actual))) {
                     nameView.setText("⭐ " + actual.nombreCanal);
                 }
 
@@ -1211,9 +1259,10 @@ public class MainActivity extends AppCompatActivity {
             if (group.equals("[ TODOS LOS CANALES ]")) {
                 listaFiltradaCanales.add(canal);
             } else if (group.equals("⭐ [ FAVORITOS ]")) {
-                if (setDeCanalesFavoritos.contains(canal.urlStream) && !urlsAgregadas.contains(canal.urlStream)) {
+                String uniqueId = generarKeyCanal(canal);
+                if (setDeCanalesFavoritos.contains(uniqueId) && !urlsAgregadas.contains(uniqueId)) {
                     listaFiltradaCanales.add(canal);
-                    urlsAgregadas.add(canal.urlStream);
+                    urlsAgregadas.add(uniqueId);
                 }
             } else if (canal.grupoCanal.equalsIgnoreCase(group)) {
                 listaFiltradaCanales.add(canal);
@@ -1273,7 +1322,7 @@ public class MainActivity extends AppCompatActivity {
                 nameView.setText(actual.nombreCanal);
                 groupView.setText("» " + actual.grupoCanal);
 
-                if (setDeCanalesFavoritos.contains(actual.urlStream)) {
+                if (setDeCanalesFavoritos.contains(generarKeyCanal(actual))) {
                     nameView.setText("⭐ " + actual.nombreCanal);
                 }
 
@@ -1378,22 +1427,45 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
+            boolean configVisible = (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE);
+
+            if (!yaSeEjecutoLargoOk && !menusVisibles && !configVisible) {
+                // Solo abrir el menú si no hay nada visible (clic simple en TV sobre el video)
+                menuParaPantallaChica = false;
+                alternarMenuCanales();
+            }
             yaSeEjecutoLargoOk = false;
             tiempoPresionadoOk = 0;
-            return true;
+            return (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER);
         }
         return super.onKeyUp(keyCode, event);
     }
 
     private void cargarListaDesdeUrl(String urlM3u) {
+        // Limpiar las listas actuales inmediatamente para dar feedback visual
+        runOnUiThread(() -> {
+            listaGlobalCanales.clear();
+            listaFiltradaCanales.clear();
+            if (listViewCanales != null && listViewCanales.getAdapter() != null) {
+                ((ArrayAdapter<?>) listViewCanales.getAdapter()).notifyDataSetChanged();
+            }
+        });
+
         new Thread(() -> {
             try {
-                URL url = new URL(urlM3u);
+                // Añadir un parámetro de tiempo para saltar cualquier caché de servidor/proxy
+                String urlConCacheBuster = urlM3u + (urlM3u.contains("?") ? "&" : "?") + "t=" + System.currentTimeMillis();
+                URL url = new URL(urlConCacheBuster);
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(15000);
+                connection.setUseCaches(false);
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+                connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate");
+                connection.setRequestProperty("Pragma", "no-cache");
+                connection.setRequestProperty("Expires", "0");
 
                 BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
                 String linea;
