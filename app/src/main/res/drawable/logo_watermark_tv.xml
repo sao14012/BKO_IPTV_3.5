@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="400dp"
+    android:height="400dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Círculo exterior translúcido -->
+    <path
+        android:fillColor="#33888888"
+        android:pathData="M100,20C55.8,20 20,55.8 20,100s35.8,80 80,80s80,-35.8 80,-80S144.2,20 100,20zM100,175c-41.4,0 -75,-33.6 -75,-75s33.6,-75 75,-75s75,33.6 75,75S141.4,175 100,175z" />
+    <!-- Símbolo Play Central -->
+    <path
+        android:fillColor="#4D888888"
+        android:pathData="M85,70l50,30l-50,30z" />
+    <!-- Línea decorativa inferior -->
+    <path
+        android:fillColor="#26888888"
+        android:pathData="M60,150h80v2h-80z" />
+</vector>

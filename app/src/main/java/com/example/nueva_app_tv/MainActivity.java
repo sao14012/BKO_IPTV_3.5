@@ -67,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
     private ListView listViewGrupos;
     private android.widget.Button btnVolverGrupos;
     private ExoPlayer player;
-    private ImageView imagenSplash;
+    private View imagenSplash;
     private LinearLayout contenedorMenus;
     private TextView textNombreListaCabecera;
     private EditText inputBuscadorTiempoReal;
@@ -98,6 +98,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_FAVORITOS_SET = "favoritos_canales_urls";
     private static final String KEY_GRUPO_PREDETERMINADO = "grupo_predeterminado_iptv";
     private static final String KEY_ULTIMO_CANAL_SINTONIZADO = "ultimo_canal_sintonizado_url";
+    private static final String KEY_CLAVE_ADULTOS = "clave_parental_adultos";
+    private static final String KEY_MOSTRAR_ADULTOS = "mostrar_contenido_adulto";
+    private boolean mostrarContenidoAdulto = false;
 
     private List<String> nombresDeListasGuardadas = new ArrayList<>();
     private List<String> urlsDeListasGuardadas = new ArrayList<>();
@@ -168,10 +171,29 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         setDeCanalesFavoritos = prefs.getStringSet(KEY_FAVORITOS_SET, new HashSet<>());
+        claveAdultos = prefs.getString(KEY_CLAVE_ADULTOS, "0000");
+        mostrarContenidoAdulto = prefs.getBoolean(KEY_MOSTRAR_ADULTOS, false);
+
+        // Efecto de Zoom suave para el Splash
+        if (imagenSplash != null) {
+            imagenSplash.setScaleX(1.0f);
+            imagenSplash.setScaleY(1.0f);
+            imagenSplash.animate()
+                    .scaleX(1.15f)
+                    .scaleY(1.15f)
+                    .setDuration(6000)
+                    .start();
+        }
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (imagenSplash != null) imagenSplash.setVisibility(View.GONE);
-        }, 3000);
+            if (imagenSplash != null) {
+                imagenSplash.animate()
+                        .alpha(0f)
+                        .setDuration(1000)
+                        .withEndAction(() -> imagenSplash.setVisibility(View.GONE))
+                        .start();
+            }
+        }, 5000);
 
         try {
             DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
@@ -292,9 +314,47 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void reproducirCanalEstable(CanalEstructura canal) {
+    private boolean esGrupoAdulto(String grupo) {
+        if (grupo == null) return false;
+        String g = grupo.toUpperCase();
+        return g.contains("XXX") || g.contains("ADULTO") || g.contains("ADULT") || 
+               g.contains("+18") || g.contains("18+") || g.contains("PORNO");
+    }
+
+    private boolean esCanalAdulto(CanalEstructura canal) {
+        if (canal == null) return false;
+        return esGrupoAdulto(canal.grupoCanal);
+    }
+
+    private void reproducirCanalEstable(final CanalEstructura canal) {
         if (player == null || canal == null) return;
 
+        if (esCanalAdulto(canal)) {
+            final EditText input = new EditText(this);
+            input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+            input.setHint("Contenido Protegido");
+
+            new AlertDialog.Builder(this)
+                    .setTitle("🔞 Control Parental")
+                    .setMessage("Ingrese la clave para ver este canal:")
+                    .setView(input)
+                    .setCancelable(false)
+                    .setPositiveButton("Desbloquear", (dialog, which) -> {
+                        String pass = input.getText().toString();
+                        if (pass.equals(claveAdultos)) {
+                            continuarReproduccion(canal);
+                        } else {
+                            Toast.makeText(this, "❌ Clave incorrecta", Toast.LENGTH_SHORT).show();
+                        }
+                    })
+                    .setNegativeButton("Cerrar", null)
+                    .show();
+        } else {
+            continuarReproduccion(canal);
+        }
+    }
+
+    private void continuarReproduccion(CanalEstructura canal) {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_ULTIMO_CANAL_SINTONIZADO, canal.urlStream)
@@ -477,8 +537,18 @@ public class MainActivity extends AppCompatActivity {
 
     private void ejecutarSegundoAvisoConfirmacion(int posicionLista) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("🛑 CONFIRMACIÓN FINAL");
-        builder.setPositiveButton("SÍ, ELIMINAR", (dialog, which) -> {
+        builder.setTitle("🛑 SEGUNDA ADVERTENCIA");
+        builder.setMessage("Si borras la lista, perderás todos tus canales y favoritos de esta fuente.\n¿ESTÁS COMPLETAMENTE SEGURO?");
+        builder.setPositiveButton("SÍ, CONTINUAR", (dialog, which) -> ejecutarTercerAvisoConfirmacion(posicionLista));
+        builder.setNegativeButton("NO, CANCELAR", (dialog, which) -> mostrarPanelAdministradorListas());
+        builder.show();
+    }
+
+    private void ejecutarTercerAvisoConfirmacion(int posicionLista) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("❗ CONFIRMACIÓN FINAL (IRREVERSIBLE)");
+        builder.setMessage("Esta es la última oportunidad. ¿Realmente quieres ELIMINAR la lista?");
+        builder.setPositiveButton("ELIMINAR DEFINITIVAMENTE", (dialog, which) -> {
             borrarListaDeMemoria(posicionLista);
             cargarListasDesdeMemoria();
             if (urlsDeListasGuardadas.isEmpty()) {
@@ -491,7 +561,7 @@ public class MainActivity extends AppCompatActivity {
                 mostrarPanelAdministradorListas();
             }
         });
-        builder.setNegativeButton("NO", (dialog, which) -> mostrarPanelAdministradorListas());
+        builder.setNegativeButton("ME ARREPENTÍ", (dialog, which) -> mostrarPanelAdministradorListas());
         builder.show();
     }
 
@@ -680,26 +750,42 @@ public class MainActivity extends AppCompatActivity {
     private void cargarOpcionesConfiguracion() {
         if (listViewConfiguracion == null) return;
 
-        String[] opciones = {
+        String[] titulos = {
                 "📂 Gestión de Listas IPTV",
-                "🔞 Control Parental (Adultos)"
+                "🔄 Recargar Lista Actual",
+                "🔞 Control Parental (Adultos)",
+                "🎮 Guía de Controles",
+                "ℹ️ Acerca de"
         };
 
-        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(
-                this,
-                android.R.layout.simple_list_item_1,
-                opciones
-        ) {
+        String[] descripciones = {
+                "Añade, edita o elimina tus listas M3U.",
+                "Actualiza los canales de la lista en uso.",
+                "Configura la clave para contenido sensible.",
+                "Aprende cómo navegar y usar la app.",
+                "Información de la versión 1.3"
+        };
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_2, android.R.id.text1, titulos) {
             @Override
-            public android.view.View getView(int position, android.view.View convertView, android.view.ViewGroup parent) {
-                android.view.View view = super.getView(position, convertView, parent);
-                android.widget.TextView textView = view.findViewById(android.R.id.text1);
-                if (textView != null) {
-                    textView.setTextColor(android.graphics.Color.WHITE);
-                }
+            public View getView(int position, View convertView, ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                TextView t1 = view.findViewById(android.R.id.text1);
+                TextView t2 = view.findViewById(android.R.id.text2);
+
+                t1.setTextColor(android.graphics.Color.WHITE);
+                t1.setTextSize(16);
+                t1.setText(titulos[position]);
+
+                t2.setTextColor(android.graphics.Color.parseColor("#AAAAAA"));
+                t2.setTextSize(12);
+                t2.setText(descripciones[position]);
+
+                view.setPadding(30, 25, 30, 25);
                 return view;
             }
         };
+
         listViewConfiguracion.setAdapter(adapter);
         listViewConfiguracion.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
 
@@ -709,10 +795,43 @@ public class MainActivity extends AppCompatActivity {
                     mostrarSubmenuListas();
                     break;
                 case 1:
+                    if (!urlListaActualEnUso.isEmpty()) {
+                        cargarListaDesdeUrl(urlListaActualEnUso);
+                        Toast.makeText(MainActivity.this, "Actualizando canales...", Toast.LENGTH_SHORT).show();
+                        alternarMenuConfiguracion();
+                    }
+                    break;
+                case 2:
                     verificarClaveAdultos();
+                    break;
+                case 3:
+                    mostrarGuiaControles();
+                    break;
+                case 4:
+                    new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("BKO PLAYER TV 1.0")
+                            .setMessage("Versión 1.3\nDesarrollado para Android TV por Zepol Desings (Arg)\n\n© 2026 Todos los derechos reservados")
+                            .setPositiveButton("OK", null)
+                            .show();
                     break;
             }
         });
+    }
+
+    private void mostrarGuiaControles() {
+        StringBuilder guia = new StringBuilder();
+        guia.append("🔵 OK / CENTER:\n   Abre el menú de canales.\n\n");
+        guia.append("⏳ MANTENER OK (1 seg):\n   Abre este menú de Ajustes.\n\n");
+        guia.append("⬅️ FLECHA IZQUIERDA:\n   Vuelve de canales a categorías.\n\n");
+        guia.append("⭐ OK LARGO en Canal:\n   Añadir o quitar de Favoritos.\n\n");
+        guia.append("📂 OK LARGO en Grupo:\n   Fijar como grupo de inicio.\n\n");
+        guia.append("↩️ BACK / ATRÁS:\n   Cierra menús o sale de la app.");
+
+        new AlertDialog.Builder(this)
+                .setTitle("🎮 GUÍA DE CONTROLES")
+                .setMessage(guia.toString())
+                .setPositiveButton("ENTENDIDO", null)
+                .show();
     }
 
     private void ejecutarFiltradoEnTiempoReal(String texto) {
@@ -730,6 +849,8 @@ public class MainActivity extends AppCompatActivity {
             }
             Set<String> urlsAgregadas = new HashSet<>();
             for (CanalEstructura canal : listaGlobalCanales) {
+                if (!mostrarContenidoAdulto && esCanalAdulto(canal)) continue;
+
                 if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
                     listaFiltradaCanales.add(canal);
                 } else if (grupoSeleccionadoActual.equals("⭐ [ FAVORITOS ]")) {
@@ -749,6 +870,8 @@ public class MainActivity extends AppCompatActivity {
             
             Set<String> urlsAgregadas = new HashSet<>();
             for (CanalEstructura canal : listaGlobalCanales) {
+                if (!mostrarContenidoAdulto && esCanalAdulto(canal)) continue;
+
                 String nombreNormalizado = normalizarTexto(canal.nombreCanal);
                 if (nombreNormalizado.contains(consultaNormalizada)) {
                     if (grupoSeleccionadoActual.equals("[ TODOS LOS CANALES ]")) {
@@ -876,6 +999,8 @@ public class MainActivity extends AppCompatActivity {
         Set<String> urlsAgregadas = new HashSet<>();
 
         for (CanalEstructura canal : listaGlobalCanales) {
+            if (!mostrarContenidoAdulto && esCanalAdulto(canal)) continue;
+
             if (group.equals("[ TODOS LOS CANALES ]")) {
                 listaFiltradaCanales.add(canal);
             } else if (group.equals("⭐ [ FAVORITOS ]")) {
@@ -1143,7 +1268,12 @@ public class MainActivity extends AppCompatActivity {
                     listaDeGruposVisibles.clear();
                     listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
                     listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
-                    listaDeGruposVisibles.addAll(gruposOrdenados);
+                    
+                    for (String g : gruposOrdenados) {
+                        if (mostrarContenidoAdulto || !esGrupoAdulto(g)) {
+                            listaDeGruposVisibles.add(g);
+                        }
+                    }
 
                     runOnUiThread(() -> {
                         SharedPreferences prefs1 = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -1215,6 +1345,15 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         reintentoHandler.removeCallbacksAndMessages(null);
+        
+        // Limpiar caché de logos automáticamente al cerrar
+        new Thread(() -> {
+            try {
+                Glide.get(getApplicationContext()).clearDiskCache();
+            } catch (Exception ignored) {}
+        }).start();
+        Glide.get(getApplicationContext()).clearMemory();
+
         if (player != null) {
             player.release();
             player = null;
@@ -1289,20 +1428,83 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void verificarClaveAdultos() {
-        android.widget.EditText inputClave = new android.widget.EditText(this);
-        inputClave.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        inputClave.setHint("Por la seguridad de los menores");
+        final SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        claveAdultos = prefs.getString(KEY_CLAVE_ADULTOS, "0000");
+
+        final EditText input = new EditText(this);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        input.setHint("Ingrese clave actual");
 
         new android.app.AlertDialog.Builder(this)
                 .setTitle("🔞 Control Parental")
-                .setMessage("Ingrese la clave de acceso:")
-                .setView(inputClave)
-                .setPositiveButton("Ingresar", (dialog, which) -> {
-                    String claveIngresada = inputClave.getText().toString();
-                    if (claveIngresada.equals(claveAdultos)) {
-                        android.widget.Toast.makeText(this, "Acceso concedido al contenido de adultos", android.widget.Toast.LENGTH_SHORT).show();
+                .setMessage("Ingrese la clave actual para configurar:")
+                .setView(input)
+                .setPositiveButton("Siguiente", (dialog, which) -> {
+                    String pass = input.getText().toString();
+                    if (pass.equals(claveAdultos)) {
+                        String[] opciones = {"Cambiar Clave Parental", mostrarContenidoAdulto ? "Ocultar Grupos Restringidos" : "Mostrar Grupos Restringidos"};
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("Opciones de Control")
+                                .setItems(opciones, (d, whichOp) -> {
+                                    if (whichOp == 0) {
+                                        mostrarDialogoNuevaClave();
+                                    } else {
+                                        mostrarContenidoAdulto = !mostrarContenidoAdulto;
+                                        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                                .edit().putBoolean(KEY_MOSTRAR_ADULTOS, mostrarContenidoAdulto).apply();
+                                        
+                                        // Recargar la interfaz para aplicar cambios
+                                        cargarListaDesdeUrl(urlListaActualEnUso);
+                                        Toast.makeText(MainActivity.this, mostrarContenidoAdulto ? "🔓 Grupos visibles" : "🔒 Grupos ocultos", Toast.LENGTH_SHORT).show();
+                                    }
+                                }).show();
                     } else {
                         android.widget.Toast.makeText(this, "❌ Clave incorrecta", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void mostrarDialogoNuevaClave() {
+        final EditText input = new EditText(this);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        input.setHint("Nueva clave (mínimo 4 dígitos)");
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Nueva Clave")
+                .setMessage("Ingrese su nueva clave numérica:")
+                .setView(input)
+                .setPositiveButton("Siguiente", (dialog, which) -> {
+                    String nueva = input.getText().toString();
+                    if (nueva.length() >= 4) {
+                        mostrarConfirmacionNuevaClave(nueva);
+                    } else {
+                        android.widget.Toast.makeText(this, "Mínimo 4 dígitos", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void mostrarConfirmacionNuevaClave(final String nuevaClave) {
+        final EditText input = new EditText(this);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        input.setHint("Repetir nueva clave");
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Confirmar Clave")
+                .setMessage("Repita la nueva clave para confirmar:")
+                .setView(input)
+                .setPositiveButton("Guardar", (dialog, which) -> {
+                    String confirmacion = input.getText().toString();
+                    if (confirmacion.equals(nuevaClave)) {
+                        claveAdultos = nuevaClave;
+                        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                .edit().putString(KEY_CLAVE_ADULTOS, nuevaClave).apply();
+                        android.widget.Toast.makeText(this, "✅ Clave actualizada correctamente", android.widget.Toast.LENGTH_LONG).show();
+                    } else {
+                        android.widget.Toast.makeText(this, "❌ Las claves no coinciden", android.widget.Toast.LENGTH_SHORT).show();
                     }
                 })
                 .setNegativeButton("Cancelar", null)

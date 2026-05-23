@@ -8,10 +8,10 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/logo_bko"
-        android:roundIcon="@mipmap/logo_bko"
-        android:banner="@drawable/banner_bko"
-        android:label="BKO IPTV 3.5"
+        android:icon="@drawable/splash_banner"
+        android:roundIcon="@drawable/splash_banner"
+        android:banner="@drawable/splash_banner"
+        android:label="@string/app_name"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar"
         android:usesCleartextTraffic="true">
 
