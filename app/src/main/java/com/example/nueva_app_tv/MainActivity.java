@@ -8,7 +8,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.GestureDetector;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -108,6 +110,8 @@ public class MainActivity extends AppCompatActivity {
 
     private final Handler reintentoHandler = new Handler(Looper.getMainLooper());
     private String urlListaActualEnUso = "";
+    private CanalEstructura canalActualReproduciendo;
+    private GestureDetector gestureDetector;
 
     private long tiempoPresionadoOk = 0;
     private boolean yaSeEjecutoLargoOk = false;
@@ -125,12 +129,6 @@ public class MainActivity extends AppCompatActivity {
         listViewCanales = findViewById(R.id.list_view_canales);
         listViewGrupos = findViewById(R.id.list_view_grupos);
         imagenSplash = findViewById(R.id.imagen_splash);
-
-        if (listViewCanales != null && listViewGrupos != null) {
-            ViewGroup.LayoutParams paramsGrupos = listViewGrupos.getLayoutParams();
-            paramsGrupos.width = listViewCanales.getLayoutParams().width;
-            listViewGrupos.setLayoutParams(paramsGrupos);
-        }
 
         contenedorMenus = findViewById(R.id.contenedor_menus);
         textNombreListaCabecera = findViewById(R.id.text_nombre_lista_cabecera);
@@ -189,11 +187,11 @@ public class MainActivity extends AppCompatActivity {
             if (imagenSplash != null) {
                 imagenSplash.animate()
                         .alpha(0f)
-                        .setDuration(1000)
+                        .setDuration(800)
                         .withEndAction(() -> imagenSplash.setVisibility(View.GONE))
                         .start();
             }
-        }, 5000);
+        }, 3000);
 
         try {
             DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
@@ -232,6 +230,42 @@ public class MainActivity extends AppCompatActivity {
             });
 
             playerView.setOnClickListener(v -> alternarMenuCanales());
+            playerView.setOnLongClickListener(v -> {
+                alternarMenuConfiguracion();
+                return true;
+            });
+
+            gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+                @Override
+                public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                    if (Math.abs(velocityY) > Math.abs(velocityX)) {
+                        if (velocityY < -500) { // Swipe Up
+                            cambiarCanalSiguiente();
+                            return true;
+                        } else if (velocityY > 500) { // Swipe Down
+                            cambiarCanalAnterior();
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean onSingleTapConfirmed(MotionEvent e) {
+                    alternarMenuCanales();
+                    return true;
+                }
+
+                @Override
+                public void onLongPress(MotionEvent e) {
+                    alternarMenuConfiguracion();
+                }
+            });
+
+            playerView.setOnTouchListener((v, event) -> {
+                gestureDetector.onTouchEvent(event);
+                return true;
+            });
 
             listViewCanales.setOnItemClickListener((parent, view, position, id) -> {
                 CanalEstructura seleccionado = listaFiltradaCanales.get(position);
@@ -355,6 +389,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void continuarReproduccion(CanalEstructura canal) {
+        this.canalActualReproduciendo = canal;
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_ULTIMO_CANAL_SINTONIZADO, canal.urlStream)
@@ -414,6 +449,40 @@ public class MainActivity extends AppCompatActivity {
             data[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
         }
         return android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP | android.util.Base64.URL_SAFE | android.util.Base64.NO_PADDING);
+    }
+
+    private void cambiarCanalSiguiente() {
+        if (listaFiltradaCanales.isEmpty() || canalActualReproduciendo == null) return;
+        int index = -1;
+        for (int i = 0; i < listaFiltradaCanales.size(); i++) {
+            if (listaFiltradaCanales.get(i).urlStream.equals(canalActualReproduciendo.urlStream)) {
+                index = i;
+                break;
+            }
+        }
+        if (index != -1) {
+            int nextIndex = (index + 1) % listaFiltradaCanales.size();
+            CanalEstructura next = listaFiltradaCanales.get(nextIndex);
+            Toast.makeText(this, "▲ Siguiente: " + next.nombreCanal, Toast.LENGTH_SHORT).show();
+            reproducirCanalEstable(next);
+        }
+    }
+
+    private void cambiarCanalAnterior() {
+        if (listaFiltradaCanales.isEmpty() || canalActualReproduciendo == null) return;
+        int index = -1;
+        for (int i = 0; i < listaFiltradaCanales.size(); i++) {
+            if (listaFiltradaCanales.get(i).urlStream.equals(canalActualReproduciendo.urlStream)) {
+                index = i;
+                break;
+            }
+        }
+        if (index != -1) {
+            int prevIndex = (index - 1 + listaFiltradaCanales.size()) % listaFiltradaCanales.size();
+            CanalEstructura prev = listaFiltradaCanales.get(prevIndex);
+            Toast.makeText(this, "▼ Anterior: " + prev.nombreCanal, Toast.LENGTH_SHORT).show();
+            reproducirCanalEstable(prev);
+        }
     }
 
     private void cargarListasDesdeMemoria() {
@@ -597,6 +666,11 @@ public class MainActivity extends AppCompatActivity {
             String urlStr = inputUrl.getText().toString().trim();
 
             if (!nombre.isEmpty() && !urlStr.isEmpty()) {
+                // Si el usuario solo pone un nombre sin http, asumimos que es su código de cliente
+                if (!urlStr.startsWith("http")) {
+                    urlStr = "https://tu-servidor-o-web.com/listas/" + urlStr + ".m3u"; 
+                }
+                
                 if (urlStr.contains("drive.google.com")) {
                     urlStr = convertirEnlaceGoogleDriveADirecto(urlStr);
                 }
@@ -808,10 +882,17 @@ public class MainActivity extends AppCompatActivity {
                     mostrarGuiaControles();
                     break;
                 case 4:
+                    String androidId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
                     new AlertDialog.Builder(MainActivity.this)
-                            .setTitle("BKO PLAYER TV 1.0")
-                            .setMessage("Versión 1.3\nDesarrollado para Android TV por Zepol Desings (Arg)\n\n© 2026 Todos los derechos reservados")
-                            .setPositiveButton("OK", null)
+                            .setTitle("BKO IPTV 3.5")
+                            .setMessage("Versión 3.5\n\nID DE EQUIPO: " + androidId.toUpperCase() + "\n\nDesarrollado por Zepol Desings (Arg)\n\n© 2026 Todos los derechos reservados")
+                            .setPositiveButton("COPIAR ID", (dialog, which) -> {
+                                android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                                android.content.ClipData clip = android.content.ClipData.newPlainText("ID Equipo", androidId.toUpperCase());
+                                clipboard.setPrimaryClip(clip);
+                                Toast.makeText(MainActivity.this, "ID copiado al portapapeles", Toast.LENGTH_SHORT).show();
+                            })
+                            .setNegativeButton("OK", null)
                             .show();
                     break;
             }
@@ -820,12 +901,20 @@ public class MainActivity extends AppCompatActivity {
 
     private void mostrarGuiaControles() {
         StringBuilder guia = new StringBuilder();
-        guia.append("🔵 OK / CENTER:\n   Abre el menú de canales.\n\n");
-        guia.append("⏳ MANTENER OK (1 seg):\n   Abre este menú de Ajustes.\n\n");
-        guia.append("⬅️ FLECHA IZQUIERDA:\n   Vuelve de canales a categorías.\n\n");
-        guia.append("⭐ OK LARGO en Canal:\n   Añadir o quitar de Favoritos.\n\n");
-        guia.append("📂 OK LARGO en Grupo:\n   Fijar como grupo de inicio.\n\n");
-        guia.append("↩️ BACK / ATRÁS:\n   Cierra menús o sale de la app.");
+        guia.append("📱 MÓVIL (PANTALLA):\n");
+        guia.append("👆 TOQUE SIMPLE: Abre el menú de canales.\n");
+        guia.append("☝️ TOQUE LARGO: Abre este menú de Ajustes.\n");
+        guia.append("↕️ SWIPE ARRIBA/ABAJO: Cambiar de canal.\n\n");
+        
+        guia.append("📺 TV / CONTROL REMOTO:\n");
+        guia.append("🔵 OK / CENTER: Abre el menú de canales.\n");
+        guia.append("⏳ MANTENER OK: Abre este menú de Ajustes.\n");
+        guia.append("↕️ ARRIBA / ABAJO: Cambiar de canal.\n");
+        guia.append("⬅️ FLECHA IZQUIERDA: Vuelve a categorías.\n\n");
+        
+        guia.append("⭐ ADICIONALES:\n");
+        guia.append("✨ OK LARGO en Canal: Favoritos.\n");
+        guia.append("↩️ BACK: Cierra menús o sale.");
 
         new AlertDialog.Builder(this)
                 .setTitle("🎮 GUÍA DE CONTROLES")
@@ -926,12 +1015,12 @@ public class MainActivity extends AppCompatActivity {
                 if (convertView == null) {
                     filaLayout = new LinearLayout(getContext());
                     filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                    filaLayout.setPadding(30, 10, 30, 10);
+                    filaLayout.setPadding(35, 25, 35, 25);
                     filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
                     ImageView imgLogo = new ImageView(getContext());
                     imgLogo.setId(View.generateViewId());
-                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(65, 65);
+                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(80, 80);
                     lpImg.rightMargin = 25;
                     imgLogo.setLayoutParams(lpImg);
                     imgLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -1021,12 +1110,12 @@ public class MainActivity extends AppCompatActivity {
                 if (convertView == null) {
                     filaLayout = new LinearLayout(getContext());
                     filaLayout.setOrientation(LinearLayout.HORIZONTAL);
-                    filaLayout.setPadding(30, 10, 30, 10);
+                    filaLayout.setPadding(35, 25, 35, 25);
                     filaLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
                     ImageView imgLogo = new ImageView(getContext());
                     imgLogo.setId(View.generateViewId());
-                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(65, 65);
+                    LinearLayout.LayoutParams lpImg = new LinearLayout.LayoutParams(80, 80);
                     lpImg.rightMargin = 25;
                     imgLogo.setLayoutParams(lpImg);
                     imgLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -1107,7 +1196,7 @@ public class MainActivity extends AppCompatActivity {
 
                 android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
                         .setTitle("Salir de la aplicación")
-                        .setMessage("¿Seguro que deseas salir de BKO IPTV?")
+                        .setMessage("¿Seguro que deseas salir de BKO IPTV 3.5?")
                         .setPositiveButton("Sí", (dialogInterface, which) -> {
                             finishAffinity();
                         })
@@ -1126,6 +1215,15 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (!menusVisibles) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                cambiarCanalAnterior();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                cambiarCanalSiguiente();
+                return true;
+            }
+
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (event.getRepeatCount() == 0) {
