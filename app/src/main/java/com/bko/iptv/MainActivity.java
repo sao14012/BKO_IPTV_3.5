@@ -453,20 +453,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarDialogoCanalCaido() {
-        new AlertDialog.Builder(this)
-                .setTitle("⚠️ CANAL SIN SEÑAL")
-                .setMessage("No se ha podido conectar con el canal seleccionado.\n\n¿Deseas abrir la lista para elegir otro canal?")
-                .setCancelable(false)
-                .setPositiveButton("VER CANALES", (dialog, which) -> {
-                    alternarMenuCanales();
-                })
-                .setNegativeButton("REINTENTAR", (dialog, which) -> {
-                    if (player != null) {
-                        player.prepare();
-                        player.play();
-                    }
-                })
-                .show();
+        runOnUiThread(() -> {
+            new AlertDialog.Builder(this)
+                    .setTitle("⚠️ CANAL SIN SEÑAL")
+                    .setMessage("No se ha podido conectar con el canal seleccionado.\n\n¿Deseas abrir la lista para elegir otro canal?")
+                    .setCancelable(false)
+                    .setPositiveButton("VER CANALES", (dialog, which) -> {
+                        menuParaPantallaChica = false;
+                        alternarMenuCanales();
+                    })
+                    .setNegativeButton("REINTENTAR", (dialog, which) -> {
+                        if (player != null) {
+                            player.prepare();
+                            player.play();
+                        }
+                    })
+                    .show();
+        });
     }
 
     private boolean esGrupoAdulto(String grupo) {
@@ -1624,10 +1627,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        // Al regresar del standby, si había un canal sintonizado, lo reiniciamos
+        if (player != null && canalActualReproduciendo != null && !player.isPlaying()) {
+            reproducirCanalEstable(canalActualReproduciendo, player);
+        }
+        if (playerMini != null && canalMiniReproduciendo != null) {
+            reproducirCanalEstable(canalMiniReproduciendo, playerMini);
+        }
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
-        if (player != null) player.pause();
-        if (playerMini != null) playerMini.pause();
+        // CRÍTICO PARA TV: Liberar el decodificador de hardware inmediatamente
+        // para evitar que se bloquee el sistema al apagar el televisor.
+        if (player != null) {
+            player.stop();
+            player.clearMediaItems();
+        }
+        if (playerMini != null) {
+            playerMini.stop();
+            playerMini.clearMediaItems();
+        }
     }
 
     @Override
