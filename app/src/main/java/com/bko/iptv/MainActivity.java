@@ -1565,8 +1565,9 @@ public class MainActivity extends AppCompatActivity {
                         verificarSiMostrarConfiguracionObligatoria();
                     }
                 } else {
-                    // Si el equipo no existe, lo registramos con la URL predeterminada
-                    mDatabase.child("clientes").child(androidIdUnico).child("nombre").setValue("Nuevo Equipo");
+                    // Si el equipo no existe, lo registramos con su Marca y Modelo automáticamente
+                    String modeloEquipo = android.os.Build.MANUFACTURER.toUpperCase() + " " + android.os.Build.MODEL;
+                    mDatabase.child("clientes").child(androidIdUnico).child("nombre").setValue(modeloEquipo + " (Nuevo)");
                     mDatabase.child("clientes").child(androidIdUnico).child("activo").setValue(false);
                     mDatabase.child("clientes").child(androidIdUnico).child("url_lista").setValue("https://drive.google.com/file/d/1xVwQ6cPavFTb9Fhs_ID57EjNl5LmolRA/view?usp=sharing");
                     equipoActivadoRemotamente = false;
