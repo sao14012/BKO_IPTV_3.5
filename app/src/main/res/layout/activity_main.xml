@@ -9,6 +9,103 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Pantalla de Fondo (Cuando no hay video o es Radio) -->
+    <RelativeLayout
+        android:id="@+id/layout_fondo_inicio"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:visibility="visible">
+
+        <ImageView
+            android:id="@+id/img_background_home"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/splash_banner"
+            android:scaleType="centerCrop"
+            android:alpha="1.0" />
+
+        <!-- Overlay oscuro para que el texto sea legible -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#88000000" />
+
+        <TextView
+            android:id="@+id/text_estado_reproduccion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:text="BKO IPTV 3.5"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="bold|italic"
+            android:gravity="center"
+            android:padding="20dp"
+            android:shadowColor="#000000"
+            android:shadowDx="2"
+            android:shadowDy="2"
+            android:shadowRadius="3"
+            android:visibility="gone" />
+
+        <!-- Botones de Inicio -->
+        <LinearLayout
+            android:id="@+id/layout_botones_inicio"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_alignParentStart="true"
+            android:layout_marginStart="30dp"
+            android:layout_marginTop="50dp"
+            android:gravity="top"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/btn_inicio_canales"
+                android:layout_width="200dp"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="5dp"
+                android:background="@drawable/selector_botones_inicio"
+                android:paddingHorizontal="25dp"
+                android:text="⊞ CANALES"
+                android:textColor="@color/selector_color_texto_inicio"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="start|center_vertical"
+                android:focusable="true" />
+
+            <Button
+                android:id="@+id/btn_inicio_ajustes"
+                android:layout_width="200dp"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="5dp"
+                android:background="@drawable/selector_botones_inicio"
+                android:paddingHorizontal="25dp"
+                android:text="⛭ AJUSTES"
+                android:textColor="@color/selector_color_texto_inicio"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="start|center_vertical"
+                android:focusable="true" />
+
+            <Button
+                android:id="@+id/btn_inicio_salir"
+                android:layout_width="200dp"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="5dp"
+                android:background="@drawable/selector_botones_inicio"
+                android:paddingHorizontal="25dp"
+                android:text="✕ SALIR"
+                android:textColor="@color/selector_color_texto_inicio"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="start|center_vertical"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
     <!-- Mini Reproductor (Multiview) -->
     <FrameLayout
         android:id="@+id/contenedor_mini_player"
@@ -161,6 +258,75 @@
             android:dividerHeight="1dp"
             android:focusable="true"
             android:scrollbars="none" />
+
+    </LinearLayout>
+
+    <!-- Capa de Brillo (Filtro de Cine) -->
+    <View
+        android:id="@+id/overlay_brillo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:alpha="0.0"
+        android:visibility="visible"
+        android:clickable="false"
+        android:focusable="false" />
+
+    <!-- Control de Brillo Pequeño -->
+    <LinearLayout
+        android:id="@+id/contenedor_ajuste_brillo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="50dp"
+        android:background="#E6000000"
+        android:orientation="vertical"
+        android:padding="15dp"
+        android:visibility="gone"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="☀ AJUSTE DE BRILLO"
+            android:textColor="#FFD700"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/text_valor_brillo"
+                android:layout_width="60dp"
+                android:layout_height="wrap_content"
+                android:text="100%"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:gravity="center" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" (Usar ← → para ajustar)"
+                android:textColor="#AAAAAA"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_cerrar_brillo"
+            android:layout_width="wrap_content"
+            android:layout_height="35dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/selector_botones_inicio"
+            android:text="✕ CERRAR"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:paddingHorizontal="20dp" />
 
     </LinearLayout>
 

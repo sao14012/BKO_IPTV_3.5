@@ -73,10 +73,17 @@ public class MainActivity extends AppCompatActivity {
     private ExoPlayer player;
     private ExoPlayer playerMini;
     private View imagenSplash;
+    private View layoutFondoInicio;
+    private View layoutBotonesInicio;
+    private TextView textEstadoReproduccion;
     private LinearLayout contenedorMenus;
     private TextView textNombreListaCabecera;
     private EditText inputBuscadorTiempoReal;
     private View contenedorConfiguracion;
+    private View overlayBrillo;
+    private View contenedorAjusteBrillo;
+    private TextView textValorBrillo;
+    private int nivelBrilloActual = 100; // 0 a 100
     private ListView listViewConfiguracion;
     private String nombreListaActualEnUso = "BKO IPTV";
     private String claveAdultos = "0000";
@@ -113,6 +120,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final Handler reintentoHandler = new Handler(Looper.getMainLooper());
     private String urlListaActualEnUso = "";
+    
     private CanalEstructura canalActualReproduciendo;
     private CanalEstructura canalMiniReproduciendo;
     private GestureDetector gestureDetector;
@@ -138,11 +146,24 @@ public class MainActivity extends AppCompatActivity {
         listViewCanales = findViewById(R.id.list_view_canales);
         listViewGrupos = findViewById(R.id.list_view_grupos);
         imagenSplash = findViewById(R.id.imagen_splash);
+        layoutFondoInicio = findViewById(R.id.layout_fondo_inicio);
+        layoutBotonesInicio = findViewById(R.id.layout_botones_inicio);
+        textEstadoReproduccion = findViewById(R.id.text_estado_reproduccion);
+
+        findViewById(R.id.btn_inicio_canales).setOnClickListener(v -> alternarMenuCanales());
+        findViewById(R.id.btn_inicio_ajustes).setOnClickListener(v -> alternarMenuConfiguracion());
+        findViewById(R.id.btn_inicio_salir).setOnClickListener(v -> mostrarDialogoSalir());
 
         contenedorMenus = findViewById(R.id.contenedor_menus);
         textNombreListaCabecera = findViewById(R.id.text_nombre_lista_cabecera);
         inputBuscadorTiempoReal = findViewById(R.id.input_buscador_canales);
         contenedorConfiguracion = findViewById(R.id.contenedor_configuracion);
+        overlayBrillo = findViewById(R.id.overlay_brillo);
+        contenedorAjusteBrillo = findViewById(R.id.contenedor_ajuste_brillo);
+        textValorBrillo = findViewById(R.id.text_valor_brillo);
+        
+        findViewById(R.id.btn_cerrar_brillo).setOnClickListener(v -> cerrarAjusteBrillo());
+        
         listViewConfiguracion = findViewById(R.id.list_view_configuracion);
         cargarOpcionesConfiguracion();
 
@@ -178,6 +199,8 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         setDeCanalesFavoritos = new HashSet<>(prefs.getStringSet(KEY_FAVORITOS_SET, new HashSet<>()));
+        nivelBrilloActual = prefs.getInt("nivel_brillo_manual", 100);
+        aplicarBrilloVisual(nivelBrilloActual);
         claveAdultos = prefs.getString(KEY_CLAVE_ADULTOS, "0000");
         mostrarContenidoAdulto = prefs.getBoolean(KEY_MOSTRAR_ADULTOS, false);
 
@@ -232,6 +255,24 @@ public class MainActivity extends AppCompatActivity {
                 public void onPlaybackStateChanged(int playbackState) {
                     if (playbackState == Player.STATE_READY) {
                         contadorErroresReproduccion = 0;
+                    } else if (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED) {
+                        if (layoutFondoInicio != null) {
+                            layoutFondoInicio.setVisibility(View.VISIBLE);
+                            if (layoutBotonesInicio != null) layoutBotonesInicio.setVisibility(View.VISIBLE);
+                        }
+                    }
+                }
+
+                @Override
+                public void onVideoSizeChanged(com.google.android.exoplayer2.video.VideoSize videoSize) {
+                    if (videoSize.width > 0 && videoSize.height > 0) {
+                        // ES VIDEO: Ocultar fondo y botones
+                        if (layoutFondoInicio != null) layoutFondoInicio.setVisibility(View.GONE);
+                        if (layoutBotonesInicio != null) layoutBotonesInicio.setVisibility(View.GONE);
+                    } else {
+                        // ES AUDIO/RADIO: Mostrar fondo con botones (sin texto extra)
+                        if (layoutFondoInicio != null) layoutFondoInicio.setVisibility(View.VISIBLE);
+                        if (layoutBotonesInicio != null) layoutBotonesInicio.setVisibility(View.VISIBLE);
                     }
                 }
 
@@ -239,16 +280,21 @@ public class MainActivity extends AppCompatActivity {
                 public void onPlayerError(PlaybackException error) {
                     contadorErroresReproduccion++;
                     
-                    if (contadorErroresReproduccion >= 3) {
+                    if (contadorErroresReproduccion >= 5) {
                         reintentoHandler.removeCallbacksAndMessages(null);
-                        mostrarDialogoCanalCaido();
+                        if (layoutFondoInicio != null) {
+                            layoutFondoInicio.setVisibility(View.VISIBLE);
+                            if (layoutBotonesInicio != null) {
+                                layoutBotonesInicio.setVisibility(View.VISIBLE);
+                                findViewById(R.id.btn_inicio_canales).requestFocus();
+                            }
+                        }
+                        Toast.makeText(MainActivity.this, "❌ No se pudo conectar tras 5 intentos.", Toast.LENGTH_LONG).show();
                         contadorErroresReproduccion = 0;
                         return;
                     }
 
-                    Throwable cause = error.getCause();
-                    String msg = cause != null ? cause.getMessage() : error.getErrorCodeName();
-                    Toast.makeText(MainActivity.this, "Fallo de señal (" + msg + "). Reintento " + contadorErroresReproduccion + "/3", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, "Señal débil. Reintentando " + contadorErroresReproduccion + "/5 en 20 seg...", Toast.LENGTH_SHORT).show();
 
                     if (player != null) {
                         reintentoHandler.removeCallbacksAndMessages(null);
@@ -257,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
                                 player.prepare();
                                 player.play();
                             }
-                        }, 4000);
+                        }, 20000); // 20 segundos entre reintentos
                     }
                 }
 
@@ -452,24 +498,40 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void mostrarDialogoCanalCaido() {
-        runOnUiThread(() -> {
-            new AlertDialog.Builder(this)
-                    .setTitle("⚠️ CANAL SIN SEÑAL")
-                    .setMessage("No se ha podido conectar con el canal seleccionado.\n\n¿Deseas abrir la lista para elegir otro canal?")
-                    .setCancelable(false)
-                    .setPositiveButton("VER CANALES", (dialog, which) -> {
-                        menuParaPantallaChica = false;
-                        alternarMenuCanales();
-                    })
-                    .setNegativeButton("REINTENTAR", (dialog, which) -> {
-                        if (player != null) {
-                            player.prepare();
-                            player.play();
-                        }
-                    })
-                    .show();
-        });
+    private void activarModoAjusteBrillo() {
+        if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
+        if (contenedorAjusteBrillo != null) {
+            contenedorAjusteBrillo.setVisibility(View.VISIBLE);
+            if (textValorBrillo != null) textValorBrillo.setText(nivelBrilloActual + "%");
+            findViewById(R.id.btn_cerrar_brillo).requestFocus();
+        }
+    }
+
+    private void cerrarAjusteBrillo() {
+        if (contenedorAjusteBrillo != null) contenedorAjusteBrillo.setVisibility(View.GONE);
+        // Al cerrar, nos quedamos directamente en la reproducción
+    }
+
+    private void aplicarBrilloVisual(int nivel) {
+        if (overlayBrillo != null) {
+            // El nivel es de 0 (oscuro total) a 100 (brillo real)
+            // La opacidad del overlay es inversa: 1.0 es negro total, 0.0 es nada.
+            float opacidad = (100 - nivel) / 100f;
+            // Limitamos a 0.8 para que no quede la pantalla 100% negra por error
+            if (opacidad > 0.8f) opacidad = 0.8f; 
+            overlayBrillo.setAlpha(opacidad);
+        }
+    }
+
+    private void actualizarInterfazBrillo() {
+        if (textValorBrillo != null) textValorBrillo.setText(nivelBrilloActual + "%");
+        aplicarBrilloVisual(nivelBrilloActual);
+        
+        // Guardar preferencia
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putInt("nivel_brillo_manual", nivelBrilloActual)
+                .apply();
     }
 
     private boolean esGrupoAdulto(String grupo) {
@@ -519,6 +581,9 @@ public class MainActivity extends AppCompatActivity {
     private void continuarReproduccion(CanalEstructura canal, ExoPlayer targetPlayer) {
         if (targetPlayer == player) {
             this.canalActualReproduciendo = canal;
+            if (layoutFondoInicio != null) {
+                layoutFondoInicio.setVisibility(View.VISIBLE);
+            }
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
                     .putString(KEY_ULTIMO_CANAL_SINTONIZADO, canal.urlStream)
@@ -587,14 +652,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void cerrarMiniPlayer() {
-        if (playerMini != null) {
-            playerMini.stop();
-            canalMiniReproduciendo = null;
-        }
-        if (contenedorMiniPlayer != null) {
+        if (contenedorMiniPlayer != null && contenedorMiniPlayer.getVisibility() == View.VISIBLE) {
+            if (playerMini != null) {
+                playerMini.stop();
+                canalMiniReproduciendo = null;
+            }
             contenedorMiniPlayer.setVisibility(View.GONE);
+            Toast.makeText(this, "✖ Mini Pantalla Cerrada", Toast.LENGTH_SHORT).show();
         }
-        Toast.makeText(this, "✖ Mini Pantalla Cerrada", Toast.LENGTH_SHORT).show();
     }
 
     private void cambiarCanalSiguiente(ExoPlayer targetPlayer) {
@@ -981,6 +1046,7 @@ public class MainActivity extends AppCompatActivity {
         String[] titulos = {
                 "📂 Gestión de Listas IPTV",
                 "🔄 Recargar Lista Actual",
+                "☀ Ajuste de Brillo",
                 "🔞 Control Parental (Adultos)",
                 "🎮 Guía de Controles",
                 "ℹ️ Acerca de"
@@ -989,9 +1055,10 @@ public class MainActivity extends AppCompatActivity {
         String[] descripciones = {
                 "Añade, edita o elimina tus listas M3U.",
                 "Actualiza los canales de la lista en uso.",
+                "Controla la intensidad de luz de la pantalla.",
                 "Configura la clave para contenido sensible.",
                 "Aprende cómo navegar y usar la app.",
-                "Información de la versión 1.3"
+                "Información de la versión 3.5"
         };
 
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_2, android.R.id.text1, titulos) {
@@ -1030,12 +1097,15 @@ public class MainActivity extends AppCompatActivity {
                     }
                     break;
                 case 2:
-                    verificarClaveAdultos();
+                    activarModoAjusteBrillo();
                     break;
                 case 3:
-                    mostrarGuiaControles();
+                    verificarClaveAdultos();
                     break;
                 case 4:
+                    mostrarGuiaControles();
+                    break;
+                case 5:
                     String androidId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
                     new AlertDialog.Builder(MainActivity.this)
                             .setTitle("BKO IPTV 3.5")
@@ -1353,38 +1423,38 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
+        boolean configVisible = (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE);
+        boolean inicioVisible = (layoutBotonesInicio != null && layoutBotonesInicio.getVisibility() == View.VISIBLE);
+        boolean brilloVisible = (contenedorAjusteBrillo != null && contenedorAjusteBrillo.getVisibility() == View.VISIBLE);
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (menusVisibles) {
+            if (brilloVisible) {
+                cerrarAjusteBrillo();
+                return true;
+            }
+            if (menusVisibles || configVisible) {
                 limpiarBuscadorOcultarMenus();
                 return true;
-            } else {
-                if (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE) {
-                    alternarMenuConfiguracion();
-                    return true;
+            } else if (layoutFondoInicio != null && layoutFondoInicio.getVisibility() != View.VISIBLE) {
+                // Si hay video, volvemos al fondo de inicio con botones
+                if (player != null) player.stop();
+                
+                // Solo llamamos a cerrarMiniPlayer si realmente está visible
+                cerrarMiniPlayer();
+                
+                layoutFondoInicio.setVisibility(View.VISIBLE);
+                if (layoutBotonesInicio != null) {
+                    layoutBotonesInicio.setVisibility(View.VISIBLE);
+                    findViewById(R.id.btn_inicio_canales).requestFocus();
                 }
-
-                android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
-                        .setTitle("Salir de la aplicación")
-                        .setMessage("¿Seguro que deseas salir de BKO IPTV 3.5?")
-                        .setPositiveButton("Sí", (dialogInterface, which) -> {
-                            finishAffinity();
-                        })
-                        .setNegativeButton("No", (dialogInterface, which) -> {
-                            dialogInterface.dismiss();
-                        })
-                        .create();
-
-                dialog.setOnShowListener(dialogInterface -> {
-                    dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).requestFocus();
-                });
-
-                dialog.show();
+                return true;
+            } else {
+                mostrarDialogoSalir();
                 return true;
             }
         }
 
-        if (!menusVisibles) {
+        if (!menusVisibles && !configVisible && !inicioVisible && !brilloVisible) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 cambiarCanalAnterior(player);
                 return true;
@@ -1393,7 +1463,22 @@ public class MainActivity extends AppCompatActivity {
                 cambiarCanalSiguiente(player);
                 return true;
             }
+        }
 
+        if (brilloVisible) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                if (nivelBrilloActual > 10) nivelBrilloActual -= 5;
+                actualizarInterfazBrillo();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                if (nivelBrilloActual < 100) nivelBrilloActual += 5;
+                actualizarInterfazBrillo();
+                return true;
+            }
+        }
+
+        if (!menusVisibles && !configVisible && !inicioVisible && !brilloVisible) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (event.getRepeatCount() == 0) {
@@ -1427,13 +1512,33 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
+    private void mostrarDialogoSalir() {
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle("Salir de la aplicación")
+                .setMessage("¿Seguro que deseas salir de BKO IPTV 3.5?")
+                .setPositiveButton("Sí", (dialogInterface, which) -> {
+                    finishAffinity();
+                })
+                .setNegativeButton("No", (dialogInterface, which) -> {
+                    dialogInterface.dismiss();
+                })
+                .create();
+
+        dialog.setOnShowListener(dialogInterface -> {
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).requestFocus();
+        });
+
+        dialog.show();
+    }
+
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE);
             boolean configVisible = (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE);
+            boolean inicioVisible = (layoutBotonesInicio != null && layoutBotonesInicio.getVisibility() == View.VISIBLE);
 
-            if (!yaSeEjecutoLargoOk && !menusVisibles && !configVisible) {
+            if (!yaSeEjecutoLargoOk && !menusVisibles && !configVisible && !inicioVisible) {
                 // Solo abrir el menú si no hay nada visible (clic simple en TV sobre el video)
                 menuParaPantallaChica = false;
                 alternarMenuCanales();
@@ -1544,6 +1649,17 @@ public class MainActivity extends AppCompatActivity {
                 }
                 reader.close();
                 connection.disconnect();
+
+                // LÓGICA DE AUTO-DERIVACIÓN (PUENTE)
+                if (listaGlobalCanales.size() == 1) {
+                    String urlUnica = listaGlobalCanales.get(0).urlStream;
+                    // Si el único "canal" es en realidad un enlace a otra lista M3U o Drive
+                    if (urlUnica.contains(".m3u") || urlUnica.contains("export=download") || urlUnica.contains("drive.google.com")) {
+                        // Saltamos a la lista real automáticamente
+                        cargarListaDesdeUrl(urlUnica);
+                        return; // Salimos de esta ejecución para empezar la nueva
+                    }
+                }
 
                 if (!listaGlobalCanales.isEmpty()) {
                     Collections.sort(listaGlobalCanales, new Comparator<CanalEstructura>() {
