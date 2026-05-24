@@ -44,6 +44,12 @@ import com.google.android.exoplayer2.ui.StyledPlayerView;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
 import com.google.android.exoplayer2.util.MimeTypes;
 
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -120,6 +126,10 @@ public class MainActivity extends AppCompatActivity {
 
     private final Handler reintentoHandler = new Handler(Looper.getMainLooper());
     private String urlListaActualEnUso = "";
+    private String androidIdUnico = "";
+    private DatabaseReference mDatabase;
+    private boolean equipoActivadoRemotamente = false;
+    private androidx.appcompat.app.AlertDialog dialogoConfiguracionActual;
     
     private CanalEstructura canalActualReproduciendo;
     private CanalEstructura canalMiniReproduciendo;
@@ -196,6 +206,10 @@ public class MainActivity extends AppCompatActivity {
             });
         }
         playerView.setKeepScreenOn(true);
+
+        mDatabase = FirebaseDatabase.getInstance().getReference();
+        androidIdUnico = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID).toUpperCase();
+        verificarActivacionEquipo();
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         setDeCanalesFavoritos = new HashSet<>(prefs.getStringSet(KEY_FAVORITOS_SET, new HashSet<>()));
@@ -477,10 +491,9 @@ public class MainActivity extends AppCompatActivity {
             }
 
             cargarListasDesdeMemoria();
+            verificarActivacionEquipo();
 
-            if (urlsDeListasGuardadas.isEmpty()) {
-                solicitarNuevaLista(true);
-            } else {
+            if (!urlsDeListasGuardadas.isEmpty()) {
                 String urlUltima = prefs.getString(KEY_ULTIMA_URL, "");
                 if (!urlUltima.isEmpty() && urlsDeListasGuardadas.contains(urlUltima)) {
                     urlListaActualEnUso = urlUltima;
@@ -904,10 +917,21 @@ public class MainActivity extends AppCompatActivity {
                 solicitarNuevaLista(esObligatoria);
             }
         });
-        if (!esObligatoria) {
-            builder.setNegativeButton("Volver", (dialog, which) -> mostrarPanelAdministradorListas());
+        if (esObligatoria) {
+            builder.setNegativeButton("IR AL INICIO", (dialog, which) -> {
+                // Al cancelar la carga obligatoria, forzamos la vista del banner de inicio
+                if (layoutFondoInicio != null) layoutFondoInicio.setVisibility(View.VISIBLE);
+                if (layoutBotonesInicio != null) {
+                    layoutBotonesInicio.setVisibility(View.VISIBLE);
+                    findViewById(R.id.btn_inicio_canales).requestFocus();
+                }
+                dialog.dismiss();
+            });
+        } else {
+            builder.setNegativeButton("VOLVER", (dialog, which) -> mostrarPanelAdministradorListas());
         }
-        builder.show();
+        dialogoConfiguracionActual = builder.create();
+        dialogoConfiguracionActual.show();
     }
 
     private String convertirEnlaceGoogleDriveADirecto(String urlDrive) {
@@ -1512,6 +1536,63 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
+    private void verificarActivacionEquipo() {
+        if (mDatabase == null) return;
+
+        mDatabase.child("clientes").child(androidIdUnico).addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot snapshot) {
+                if (snapshot.exists()) {
+                    Boolean activado = snapshot.child("activo").getValue(Boolean.class);
+                    String urlPremium = snapshot.child("url_lista").getValue(String.class);
+                    
+                    if (activado != null && activado) {
+                        equipoActivadoRemotamente = true;
+                        // Si el equipo se activa, cerramos cualquier diálogo de configuración manual
+                        if (dialogoConfiguracionActual != null && dialogoConfiguracionActual.isShowing()) {
+                            dialogoConfiguracionActual.dismiss();
+                        }
+                        
+                        if (urlPremium != null && !urlPremium.isEmpty()) {
+                            if (!urlListaActualEnUso.equals(urlPremium)) {
+                                urlListaActualEnUso = urlPremium;
+                                cargarListaDesdeUrl(urlPremium);
+                                Toast.makeText(MainActivity.this, "✅ ACCESO PREMIUM ACTIVADO", Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    } else {
+                        equipoActivadoRemotamente = false;
+                        verificarSiMostrarConfiguracionObligatoria();
+                    }
+                } else {
+                    // Si el equipo no existe, lo registramos con la URL predeterminada
+                    mDatabase.child("clientes").child(androidIdUnico).child("nombre").setValue("Nuevo Equipo");
+                    mDatabase.child("clientes").child(androidIdUnico).child("activo").setValue(false);
+                    mDatabase.child("clientes").child(androidIdUnico).child("url_lista").setValue("https://drive.google.com/file/d/1xVwQ6cPavFTb9Fhs_ID57EjNl5LmolRA/view?usp=sharing");
+                    equipoActivadoRemotamente = false;
+                    verificarSiMostrarConfiguracionObligatoria();
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError error) {
+                verificarSiMostrarConfiguracionObligatoria();
+            }
+        });
+    }
+
+    private void verificarSiMostrarConfiguracionObligatoria() {
+        // Solo mostramos el cartel si:
+        // 1. Firebase terminó de cargar y dice que NO es premium.
+        // 2. No hay listas locales guardadas.
+        // 3. El diálogo no está ya abierto.
+        if (!equipoActivadoRemotamente && urlsDeListasGuardadas.isEmpty()) {
+            if (dialogoConfiguracionActual == null || !dialogoConfiguracionActual.isShowing()) {
+                solicitarNuevaLista(true);
+            }
+        }
+    }
+
     private void mostrarDialogoSalir() {
         android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
                 .setTitle("Salir de la aplicación")
@@ -1551,9 +1632,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void cargarListaDesdeUrl(String urlM3u) {
+        if (urlM3u == null || urlM3u.isEmpty()) return;
+        
+        // Convertir automáticamente si es un enlace de Google Drive
+        final String urlFinal = urlM3u.contains("drive.google.com") ? convertirEnlaceGoogleDriveADirecto(urlM3u) : urlM3u;
+
         new Thread(() -> {
             try {
-                URL url = new URL(urlM3u);
+                URL url = new URL(urlFinal);
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(15000);
