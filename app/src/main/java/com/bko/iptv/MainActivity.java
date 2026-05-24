@@ -1551,29 +1551,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void cargarListaDesdeUrl(String urlM3u) {
-        // Limpiar las listas actuales inmediatamente para dar feedback visual
-        runOnUiThread(() -> {
-            listaGlobalCanales.clear();
-            listaFiltradaCanales.clear();
-            if (listViewCanales != null && listViewCanales.getAdapter() != null) {
-                ((ArrayAdapter<?>) listViewCanales.getAdapter()).notifyDataSetChanged();
-            }
-        });
-
         new Thread(() -> {
             try {
-                // Añadir un parámetro de tiempo para saltar cualquier caché de servidor/proxy
-                String urlConCacheBuster = urlM3u + (urlM3u.contains("?") ? "&" : "?") + "t=" + System.currentTimeMillis();
-                URL url = new URL(urlConCacheBuster);
+                URL url = new URL(urlM3u);
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(15000);
-                connection.setUseCaches(false);
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0");
-                connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate");
-                connection.setRequestProperty("Pragma", "no-cache");
-                connection.setRequestProperty("Expires", "0");
 
                 BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
                 String linea;
@@ -1583,7 +1568,7 @@ public class MainActivity extends AppCompatActivity {
                 String urlLogo = "";
                 String ultimaLicenciaDRM = "";
 
-                listaGlobalCanales.clear();
+                List<CanalEstructura> listaTemporal = new ArrayList<>();
                 Set<String> setDeGruposUnicos = new HashSet<>();
 
                 while ((linea = reader.readLine()) != null) {
@@ -1638,7 +1623,7 @@ public class MainActivity extends AppCompatActivity {
                                 .trim();
                         nuevoCanal.nombreOrdenado = limpio.isEmpty() ? nombreCanal.toLowerCase() : limpio;
 
-                        listaGlobalCanales.add(nuevoCanal);
+                        listaTemporal.add(nuevoCanal);
                         if (!grupoCanal.isEmpty()) setDeGruposUnicos.add(grupoCanal);
 
                         nombreCanal = "Canal Libre";
@@ -1651,18 +1636,16 @@ public class MainActivity extends AppCompatActivity {
                 connection.disconnect();
 
                 // LÓGICA DE AUTO-DERIVACIÓN (PUENTE)
-                if (listaGlobalCanales.size() == 1) {
-                    String urlUnica = listaGlobalCanales.get(0).urlStream;
-                    // Si el único "canal" es en realidad un enlace a otra lista M3U o Drive
+                if (listaTemporal.size() == 1) {
+                    String urlUnica = listaTemporal.get(0).urlStream;
                     if (urlUnica.contains(".m3u") || urlUnica.contains("export=download") || urlUnica.contains("drive.google.com")) {
-                        // Saltamos a la lista real automáticamente
                         cargarListaDesdeUrl(urlUnica);
-                        return; // Salimos de esta ejecución para empezar la nueva
+                        return;
                     }
                 }
 
-                if (!listaGlobalCanales.isEmpty()) {
-                    Collections.sort(listaGlobalCanales, new Comparator<CanalEstructura>() {
+                if (!listaTemporal.isEmpty()) {
+                    Collections.sort(listaTemporal, new Comparator<CanalEstructura>() {
                         @Override
                         public int compare(CanalEstructura c1, CanalEstructura c2) {
                             return c1.nombreOrdenado.compareTo(c2.nombreOrdenado);
@@ -1672,17 +1655,20 @@ public class MainActivity extends AppCompatActivity {
                     List<String> gruposOrdenados = new ArrayList<>(setDeGruposUnicos);
                     Collections.sort(gruposOrdenados, String.CASE_INSENSITIVE_ORDER);
 
-                    listaDeGruposVisibles.clear();
-                    listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
-                    listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
-                    
-                    for (String g : gruposOrdenados) {
-                        if (mostrarContenidoAdulto || !esGrupoAdulto(g)) {
-                            listaDeGruposVisibles.add(g);
-                        }
-                    }
-
                     runOnUiThread(() -> {
+                        listaGlobalCanales.clear();
+                        listaGlobalCanales.addAll(listaTemporal);
+                        
+                        listaDeGruposVisibles.clear();
+                        listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
+                        listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
+                        
+                        for (String g : gruposOrdenados) {
+                            if (mostrarContenidoAdulto || !esGrupoAdulto(g)) {
+                                listaDeGruposVisibles.add(g);
+                            }
+                        }
+
                         SharedPreferences prefs1 = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
                         String grupoPredet = prefs1.getString(KEY_GRUPO_PREDETERMINADO, "[ TODOS LOS CANALES ]");
@@ -1735,7 +1721,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             } catch (Exception e) {
                 runOnUiThread(() -> {
-                    Toast.makeText(MainActivity.this, "Error de red al procesar la lista.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "Error al procesar la lista.", Toast.LENGTH_LONG).show();
                     mostrarPanelAdministradorListas();
                 });
             }
