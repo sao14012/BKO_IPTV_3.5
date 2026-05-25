@@ -21,6 +21,7 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -112,6 +113,8 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS_NAME = "BkoPrefsPro";
     private static final String KEY_LISTAS_JSON = "listas_iptv_pro_json";
+    private static final String KEY_CACHE_CANALES = "cache_canales_json_v2";
+    private static final String KEY_CACHE_URL_ORIGEN = "cache_url_origen_v2";
     private static final String KEY_ULTIMA_URL = "ultima_url_sintonizada";
     private static final String KEY_FAVORITOS_SET = "favoritos_canales_urls";
     private static final String KEY_GRUPO_PREDETERMINADO = "grupo_predeterminado_iptv";
@@ -173,6 +176,16 @@ public class MainActivity extends AppCompatActivity {
         textValorBrillo = findViewById(R.id.text_valor_brillo);
         
         findViewById(R.id.btn_cerrar_brillo).setOnClickListener(v -> cerrarAjusteBrillo());
+        
+        findViewById(R.id.btn_brillo_menos).setOnClickListener(v -> {
+            if (nivelBrilloActual > 10) nivelBrilloActual -= 5;
+            actualizarInterfazBrillo();
+        });
+
+        findViewById(R.id.btn_brillo_mas).setOnClickListener(v -> {
+            if (nivelBrilloActual < 100) nivelBrilloActual += 5;
+            actualizarInterfazBrillo();
+        });
         
         listViewConfiguracion = findViewById(R.id.list_view_configuracion);
         cargarOpcionesConfiguracion();
@@ -296,6 +309,10 @@ public class MainActivity extends AppCompatActivity {
                     
                     if (contadorErroresReproduccion >= 5) {
                         reintentoHandler.removeCallbacksAndMessages(null);
+                        
+                        // Si falla el principal, cerramos todo incluyendo el PIP
+                        cerrarMiniPlayer();
+
                         if (layoutFondoInicio != null) {
                             layoutFondoInicio.setVisibility(View.VISIBLE);
                             if (layoutBotonesInicio != null) {
@@ -492,6 +509,7 @@ public class MainActivity extends AppCompatActivity {
 
             cargarListasDesdeMemoria();
             verificarActivacionEquipo();
+            cargarCacheSiExiste();
 
             if (!urlsDeListasGuardadas.isEmpty()) {
                 String urlUltima = prefs.getString(KEY_ULTIMA_URL, "");
@@ -873,25 +891,54 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(40, 20, 40, 20);
+        layout.setPadding(30, 5, 30, 5);
+
+        final TextView textAvisoLegal = new TextView(this);
+        textAvisoLegal.setText("Esta aplicación es solo un reproductor de listas .m3u / .m3u8. BKO IPTV PLAYER no proporciona listas ni direcciones url. Para su funcionamiento debe ingresar la url de uso legal proporcionada por su proveedor o una lista propia.\n\nDescargo de Responsabilidad: \"no nos responsabilizamos por el uso indebido de esta aplicación\"");
+        textAvisoLegal.setTextColor(android.graphics.Color.GRAY);
+        textAvisoLegal.setTextSize(10);
+        textAvisoLegal.setLineSpacing(0, 0.9f); // Achicar entrelineas del texto legal
+        textAvisoLegal.setPadding(10, 0, 10, 5);
+        layout.addView(textAvisoLegal);
+
+        final TextView labelNombre = new TextView(this);
+        labelNombre.setText("Titulo:");
+        labelNombre.setTextColor(android.graphics.Color.BLACK);
+        labelNombre.setTextSize(13);
+        labelNombre.setPadding(10, 0, 0, 0);
+        layout.addView(labelNombre);
 
         final EditText inputNombre = new EditText(this);
-        inputNombre.setHint("Nombre");
+        inputNombre.setHint(androidIdUnico);
+        inputNombre.setHintTextColor(android.graphics.Color.LTGRAY);
+        inputNombre.setPadding(10, 5, 10, 5); // Compactar el cuadro de texto
         inputNombre.setFocusable(true);
         inputNombre.setFocusableInTouchMode(true);
         inputNombre.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
         inputNombre.setSingleLine(true);
         layout.addView(inputNombre);
 
+        final TextView labelUrl = new TextView(this);
+        labelUrl.setText("Direccion:");
+        labelUrl.setTextColor(android.graphics.Color.BLACK);
+        labelUrl.setTextSize(13);
+        labelUrl.setPadding(10, 0, 0, 0);
+        layout.addView(labelUrl);
+
         final EditText inputUrl = new EditText(this);
-        inputUrl.setHint("URL m3u");
+        inputUrl.setHint("https://...");
+        inputUrl.setHintTextColor(android.graphics.Color.LTGRAY);
+        inputUrl.setPadding(10, 5, 10, 5); // Compactar el cuadro de texto
         inputUrl.setFocusable(true);
         inputUrl.setFocusableInTouchMode(true);
         inputUrl.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
         inputUrl.setSingleLine(true);
         layout.addView(inputUrl);
 
-        builder.setView(layout);
+        // Envolvemos todo en un ScrollView para Android TV
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.addView(layout);
+        builder.setView(scrollView);
 
         builder.setPositiveButton("Guardar", (dialog, which) -> {
             String nombre = inputNombre.getText().toString().trim();
@@ -932,6 +979,17 @@ public class MainActivity extends AppCompatActivity {
         }
         dialogoConfiguracionActual = builder.create();
         dialogoConfiguracionActual.show();
+
+        // Hacer el cartel más ancho (3/4 de la pantalla)
+        if (dialogoConfiguracionActual.getWindow() != null) {
+            android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+            getWindowManager().getDefaultDisplay().getMetrics(metrics);
+            int width = (int) (metrics.widthPixels * 0.75);
+            dialogoConfiguracionActual.getWindow().setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT);
+        }
+
+        // Forzar que el foco vaya al primer campo y abrir teclado
+        inputNombre.requestFocus();
     }
 
     private String convertirEnlaceGoogleDriveADirecto(String urlDrive) {
@@ -1069,6 +1127,7 @@ public class MainActivity extends AppCompatActivity {
 
         String[] titulos = {
                 "📂 Gestión de Listas IPTV",
+                "🔄 Actualizar Canales",
                 "🔄 Recargar Lista Actual",
                 "☀ Ajuste de Brillo",
                 "🔞 Control Parental (Adultos)",
@@ -1078,6 +1137,7 @@ public class MainActivity extends AppCompatActivity {
 
         String[] descripciones = {
                 "Añade, edita o elimina tus listas M3U.",
+                "Forzar descarga de canales desde el servidor.",
                 "Actualiza los canales de la lista en uso.",
                 "Controla la intensidad de luz de la pantalla.",
                 "Configura la clave para contenido sensible.",
@@ -1116,24 +1176,32 @@ public class MainActivity extends AppCompatActivity {
                 case 1:
                     if (!urlListaActualEnUso.isEmpty()) {
                         cargarListaDesdeUrl(urlListaActualEnUso);
+                        alternarMenuConfiguracion();
+                    } else {
+                        Toast.makeText(this, "No hay una lista activa para actualizar", Toast.LENGTH_SHORT).show();
+                    }
+                    break;
+                case 2:
+                    if (!urlListaActualEnUso.isEmpty()) {
+                        cargarListaDesdeUrl(urlListaActualEnUso);
                         Toast.makeText(MainActivity.this, "Actualizando canales...", Toast.LENGTH_SHORT).show();
                         alternarMenuConfiguracion();
                     }
                     break;
-                case 2:
+                case 3:
                     activarModoAjusteBrillo();
                     break;
-                case 3:
+                case 4:
                     verificarClaveAdultos();
                     break;
-                case 4:
+                case 5:
                     mostrarGuiaControles();
                     break;
-                case 5:
+                case 6:
                     String androidId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
                     new AlertDialog.Builder(MainActivity.this)
                             .setTitle("BKO IPTV 3.5")
-                            .setMessage("Versión 3.5\n\nID DE EQUIPO: " + androidId.toUpperCase() + "\n\nDesarrollado por Zepol Desings (Arg)\n\n© 2026 Todos los derechos reservados")
+                            .setMessage("Versión 3.5\n\nID DE EQUIPO: " + androidId.toUpperCase() + "\n\nDesarrollador: zepoldesings@gmail.com\n\nZepol Desings (Arg)\n\n© 2026 Todos los derechos reservados")
                             .setPositiveButton("COPIAR ID", (dialog, which) -> {
                                 android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                                 android.content.ClipData clip = android.content.ClipData.newPlainText("ID Equipo", androidId.toUpperCase());
@@ -1450,10 +1518,15 @@ public class MainActivity extends AppCompatActivity {
         boolean configVisible = (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE);
         boolean inicioVisible = (layoutBotonesInicio != null && layoutBotonesInicio.getVisibility() == View.VISIBLE);
         boolean brilloVisible = (contenedorAjusteBrillo != null && contenedorAjusteBrillo.getVisibility() == View.VISIBLE);
+        boolean miniVisible = (contenedorMiniPlayer != null && contenedorMiniPlayer.getVisibility() == View.VISIBLE);
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (brilloVisible) {
                 cerrarAjusteBrillo();
+                return true;
+            }
+            if (miniVisible) {
+                cerrarMiniPlayer();
                 return true;
             }
             if (menusVisibles || configVisible) {
@@ -1548,13 +1621,21 @@ public class MainActivity extends AppCompatActivity {
                     
                     if (activado != null && activado) {
                         equipoActivadoRemotamente = true;
-                        // Si el equipo se activa, cerramos cualquier diálogo de configuración manual
                         if (dialogoConfiguracionActual != null && dialogoConfiguracionActual.isShowing()) {
                             dialogoConfiguracionActual.dismiss();
                         }
                         
                         if (urlPremium != null && !urlPremium.isEmpty()) {
-                            if (!urlListaActualEnUso.equals(urlPremium)) {
+                            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                            String urlCache = prefs.getString(KEY_CACHE_URL_ORIGEN, "");
+                            
+                            // Si la URL es la misma que la del cache y tenemos datos guardados, no descargamos nada
+                            if (urlPremium.equals(urlCache) && !listaGlobalCanales.isEmpty()) {
+                                return; 
+                            }
+                            
+                            // Si la URL cambió o la lista está vacía, descargamos
+                            if (!urlListaActualEnUso.equals(urlPremium) || listaGlobalCanales.isEmpty()) {
                                 urlListaActualEnUso = urlPremium;
                                 cargarListaDesdeUrl(urlPremium);
                                 Toast.makeText(MainActivity.this, "✅ ACCESO PREMIUM ACTIVADO", Toast.LENGTH_LONG).show();
@@ -1635,6 +1716,8 @@ public class MainActivity extends AppCompatActivity {
     private void cargarListaDesdeUrl(String urlM3u) {
         if (urlM3u == null || urlM3u.isEmpty()) return;
         
+        runOnUiThread(() -> Toast.makeText(this, "⌛ CARGANDO LISTA, POR FAVOR ESPERE...", Toast.LENGTH_LONG).show());
+
         // Convertir automáticamente si es un enlace de Google Drive
         final String urlFinal = urlM3u.contains("drive.google.com") ? convertirEnlaceGoogleDriveADirecto(urlM3u) : urlM3u;
 
@@ -1739,80 +1822,160 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
 
+                    // Guardar en cache antes de mostrar
+                    guardarCacheCanales(listaTemporal, urlM3u);
+
                     List<String> gruposOrdenados = new ArrayList<>(setDeGruposUnicos);
                     Collections.sort(gruposOrdenados, String.CASE_INSENSITIVE_ORDER);
 
                     runOnUiThread(() -> {
-                        listaGlobalCanales.clear();
-                        listaGlobalCanales.addAll(listaTemporal);
-                        
-                        listaDeGruposVisibles.clear();
-                        listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
-                        listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
-                        
-                        for (String g : gruposOrdenados) {
-                            if (mostrarContenidoAdulto || !esGrupoAdulto(g)) {
-                                listaDeGruposVisibles.add(g);
-                            }
-                        }
-
-                        SharedPreferences prefs1 = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-
-                        String grupoPredet = prefs1.getString(KEY_GRUPO_PREDETERMINADO, "[ TODOS LOS CANALES ]");
-                        if (listaDeGruposVisibles.contains(grupoPredet)) {
-                            grupoSeleccionadoActual = grupoPredet;
-                        } else {
-                            grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
-                        }
-                        aplicarFiltroDeGrupo(grupoSeleccionadoActual);
-
-                        String ultimoCanalUrl = prefs1.getString(KEY_ULTIMO_CANAL_SINTONIZADO, "");
-                        CanalEstructura canalAIniciar = null;
-
-                        if (!ultimoCanalUrl.isEmpty()) {
-                            for (CanalEstructura c : listaGlobalCanales) {
-                                if (c.urlStream.equals(ultimoCanalUrl)) {
-                                    canalAIniciar = c;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (canalAIniciar == null && !listaGlobalCanales.isEmpty()) {
-                            canalAIniciar = listaGlobalCanales.get(0);
-                        }
-
-                        if (canalAIniciar != null) {
-                            reproducirCanalEstable(canalAIniciar);
-                        }
-
-                        ArrayAdapter<String> adapterGrupos = new ArrayAdapter<String>(
-                                MainActivity.this, android.R.layout.simple_list_item_1, listaDeGruposVisibles) {
-                            @Override
-                            public View getView(int position, View convertView, ViewGroup parent) {
-                                View view = super.getView(position, convertView, parent);
-                                TextView text = view.findViewById(android.R.id.text1);
-                                String itemText = getItem(position);
-                                if (itemText.contains("FAVORITOS")) {
-                                    text.setTextColor(android.graphics.Color.CYAN);
-                                } else {
-                                    text.setTextColor(android.graphics.Color.YELLOW);
-                                }
-                                text.setPadding(30, 40, 30, 40);
-                                return view;
-                            }
-                        };
-                        listViewGrupos.setAdapter(adapterGrupos);
-                        listViewGrupos.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
+                        procesarListaTerminada(listaTemporal, gruposOrdenados);
                     });
                 }
             } catch (Exception e) {
                 runOnUiThread(() -> {
-                    Toast.makeText(MainActivity.this, "Error al procesar la lista.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "Error de red al procesar la lista.", Toast.LENGTH_LONG).show();
                     mostrarPanelAdministradorListas();
                 });
             }
         }).start();
+    }
+
+    private void procesarListaTerminada(List<CanalEstructura> lista, List<String> gruposOrdenados) {
+        listaGlobalCanales.clear();
+        listaGlobalCanales.addAll(lista);
+        
+        listaDeGruposVisibles.clear();
+        listaDeGruposVisibles.add("[ TODOS LOS CANALES ]");
+        listaDeGruposVisibles.add("⭐ [ FAVORITOS ]");
+        
+        for (String g : gruposOrdenados) {
+            if (mostrarContenidoAdulto || !esGrupoAdulto(g)) {
+                listaDeGruposVisibles.add(g);
+            }
+        }
+
+        SharedPreferences prefs1 = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+
+        String grupoPredet = prefs1.getString(KEY_GRUPO_PREDETERMINADO, "[ TODOS LOS CANALES ]");
+        if (listaDeGruposVisibles.contains(grupoPredet)) {
+            grupoSeleccionadoActual = grupoPredet;
+        } else {
+            grupoSeleccionadoActual = "[ TODOS LOS CANALES ]";
+        }
+        aplicarFiltroDeGrupo(grupoSeleccionadoActual);
+
+        String ultimoCanalUrl = prefs1.getString(KEY_ULTIMO_CANAL_SINTONIZADO, "");
+        CanalEstructura canalAIniciar = null;
+
+        if (!ultimoCanalUrl.isEmpty()) {
+            for (CanalEstructura c : listaGlobalCanales) {
+                if (c.urlStream.equals(ultimoCanalUrl)) {
+                    canalAIniciar = c;
+                    break;
+                }
+            }
+        }
+
+        if (canalAIniciar == null && !listaGlobalCanales.isEmpty()) {
+            canalAIniciar = listaGlobalCanales.get(0);
+        }
+
+        if (canalAIniciar != null) {
+            reproducirCanalAlInicio(canalAIniciar);
+        }
+
+        ArrayAdapter<String> adapterGrupos = new ArrayAdapter<String>(
+                MainActivity.this, android.R.layout.simple_list_item_1, listaDeGruposVisibles) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                TextView text = view.findViewById(android.R.id.text1);
+                String itemText = getItem(position);
+                if (itemText.contains("FAVORITOS")) {
+                    text.setTextColor(android.graphics.Color.CYAN);
+                } else {
+                    text.setTextColor(android.graphics.Color.YELLOW);
+                }
+                text.setPadding(30, 40, 30, 40);
+                return view;
+            }
+        };
+        listViewGrupos.setAdapter(adapterGrupos);
+        listViewGrupos.setSelector(getResources().getDrawable(R.drawable.selector_menu_televisor));
+    }
+
+    private void reproducirCanalAlInicio(CanalEstructura canal) {
+        reproducirCanalEstable(canal);
+        
+        // Timeout de 8 segundos para el canal inicial
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (player != null && player.getPlaybackState() != Player.STATE_READY && player.getPlaybackState() != Player.STATE_BUFFERING) {
+                if (layoutFondoInicio != null && layoutFondoInicio.getVisibility() == View.VISIBLE) {
+                    Toast.makeText(this, "⚠️ Canal no disponible, elija otro", Toast.LENGTH_LONG).show();
+                    alternarMenuCanales();
+                }
+            }
+        }, 8000);
+    }
+
+    private void guardarCacheCanales(List<CanalEstructura> lista, String urlOrigen) {
+        try {
+            JSONArray array = new JSONArray();
+            for (CanalEstructura c : lista) {
+                JSONObject obj = new JSONObject();
+                obj.put("u", c.urlStream);
+                obj.put("l", c.licenseKey);
+                obj.put("n", c.nombreCanal);
+                obj.put("g", c.grupoCanal);
+                obj.put("i", c.urlLogo);
+                obj.put("t", c.tipoMime);
+                array.put(obj);
+            }
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_CACHE_CANALES, array.toString())
+                    .putString(KEY_CACHE_URL_ORIGEN, urlOrigen)
+                    .apply();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void cargarCacheSiExiste() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String json = prefs.getString(KEY_CACHE_CANALES, "");
+        if (json.isEmpty()) return;
+
+        try {
+            JSONArray array = new JSONArray(json);
+            List<CanalEstructura> lista = new ArrayList<>();
+            Set<String> grupos = new HashSet<>();
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject obj = array.getJSONObject(i);
+                CanalEstructura c = new CanalEstructura();
+                c.urlStream = obj.getString("u");
+                c.licenseKey = obj.optString("l", "");
+                c.nombreCanal = obj.getString("n");
+                c.grupoCanal = obj.getString("g");
+                c.urlLogo = obj.optString("i", "");
+                c.tipoMime = obj.optString("t", null);
+                
+                String limpio = c.nombreCanal.toLowerCase().replaceAll("^[^a-zA-Z0-9áéíóúñ]+", "").trim();
+                c.nombreOrdenado = limpio.isEmpty() ? c.nombreCanal.toLowerCase() : limpio;
+                
+                lista.add(c);
+                grupos.add(c.grupoCanal);
+            }
+            
+            List<String> gruposOrdenados = new ArrayList<>(grupos);
+            Collections.sort(gruposOrdenados, String.CASE_INSENSITIVE_ORDER);
+            
+            procesarListaTerminada(lista, gruposOrdenados);
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @Override

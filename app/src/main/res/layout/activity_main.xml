@@ -300,6 +300,16 @@
             android:layout_marginTop="10dp"
             android:gravity="center_vertical">
 
+            <Button
+                android:id="@+id/btn_brillo_menos"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:text="-"
+                android:textSize="20sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/selector_botones_inicio"
+                android:focusable="true" />
+
             <TextView
                 android:id="@+id/text_valor_brillo"
                 android:layout_width="60dp"
@@ -309,13 +319,25 @@
                 android:textSize="18sp"
                 android:gravity="center" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=" (Usar ← → para ajustar)"
-                android:textColor="#AAAAAA"
-                android:textSize="12sp" />
+            <Button
+                android:id="@+id/btn_brillo_mas"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:text="+"
+                android:textSize="20sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/selector_botones_inicio"
+                android:focusable="true" />
+
         </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=" (Usar ← → para ajustar)"
+            android:textColor="#AAAAAA"
+            android:textSize="10sp"
+            android:layout_marginTop="5dp" />
 
         <Button
             android:id="@+id/btn_cerrar_brillo"
