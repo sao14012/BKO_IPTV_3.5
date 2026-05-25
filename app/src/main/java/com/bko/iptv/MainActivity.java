@@ -1616,43 +1616,18 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onDataChange(DataSnapshot snapshot) {
                 if (snapshot.exists()) {
-                    Boolean activado = snapshot.child("activo").getValue(Boolean.class);
-                    String urlPremium = snapshot.child("url_lista").getValue(String.class);
+                    // 1. Verificamos si este equipo pertenece a una cuenta grupal
+                    String cuentaPadre = snapshot.child("pertenece_a").getValue(String.class);
                     
-                    if (activado != null && activado) {
-                        equipoActivadoRemotamente = true;
-                        if (dialogoConfiguracionActual != null && dialogoConfiguracionActual.isShowing()) {
-                            dialogoConfiguracionActual.dismiss();
-                        }
-                        
-                        if (urlPremium != null && !urlPremium.isEmpty()) {
-                            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                            String urlCache = prefs.getString(KEY_CACHE_URL_ORIGEN, "");
-                            
-                            // Si la URL es la misma que la del cache y tenemos datos guardados, no descargamos nada
-                            if (urlPremium.equals(urlCache) && !listaGlobalCanales.isEmpty()) {
-                                return; 
-                            }
-                            
-                            // Si la URL cambió o la lista está vacía, descargamos
-                            if (!urlListaActualEnUso.equals(urlPremium) || listaGlobalCanales.isEmpty()) {
-                                urlListaActualEnUso = urlPremium;
-                                cargarListaDesdeUrl(urlPremium);
-                                Toast.makeText(MainActivity.this, "✅ ACCESO PREMIUM ACTIVADO", Toast.LENGTH_LONG).show();
-                            }
-                        }
+                    if (cuentaPadre != null && !cuentaPadre.isEmpty()) {
+                        // Es un equipo vinculado a una cuenta (Ej: GUSTAVO)
+                        verificarReglasDeCuenta(cuentaPadre);
                     } else {
-                        equipoActivadoRemotamente = false;
-                        verificarSiMostrarConfiguracionObligatoria();
+                        // Es un equipo individual (como funcionaba antes)
+                        procesarActivacionIndividual(snapshot);
                     }
                 } else {
-                    // Si el equipo no existe, lo registramos con su Marca y Modelo automáticamente
-                    String modeloEquipo = android.os.Build.MANUFACTURER.toUpperCase() + " " + android.os.Build.MODEL;
-                    mDatabase.child("clientes").child(androidIdUnico).child("nombre").setValue(modeloEquipo + " (Nuevo)");
-                    mDatabase.child("clientes").child(androidIdUnico).child("activo").setValue(false);
-                    mDatabase.child("clientes").child(androidIdUnico).child("url_lista").setValue("https://drive.google.com/file/d/1xVwQ6cPavFTb9Fhs_ID57EjNl5LmolRA/view?usp=sharing");
-                    equipoActivadoRemotamente = false;
-                    verificarSiMostrarConfiguracionObligatoria();
+                    registrarNuevoEquipoAutomatico();
                 }
             }
 
@@ -1661,6 +1636,143 @@ public class MainActivity extends AppCompatActivity {
                 verificarSiMostrarConfiguracionObligatoria();
             }
         });
+    }
+
+    private void procesarActivacionIndividual(DataSnapshot snapshot) {
+        Boolean activado = snapshot.child("activo").getValue(Boolean.class);
+        String urlPremium = snapshot.child("url_lista").getValue(String.class);
+
+        if (activado != null && activado) {
+            equipoActivadoRemotamente = true;
+            if (dialogoConfiguracionActual != null && dialogoConfiguracionActual.isShowing()) {
+                dialogoConfiguracionActual.dismiss();
+            }
+            if (urlPremium != null && !urlPremium.isEmpty()) {
+                manejarCargaDeLista(urlPremium);
+            }
+        } else {
+            equipoActivadoRemotamente = false;
+            verificarSiMostrarConfiguracionObligatoria();
+        }
+    }
+
+    private void verificarReglasDeCuenta(String nombreCuenta) {
+        mDatabase.child("cuentas").child(nombreCuenta).addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot accountSnapshot) {
+                if (accountSnapshot.exists()) {
+                    Boolean cuentaActiva = accountSnapshot.child("activo").getValue(Boolean.class);
+                    String urlCuenta = accountSnapshot.child("url_lista").getValue(String.class);
+                    Integer limiteEquipos = accountSnapshot.child("limite").getValue(Integer.class);
+                    
+                    if (cuentaActiva == null || !cuentaActiva) {
+                        bloquearPorCuentaInactiva();
+                        return;
+                    }
+
+                    // Ahora contamos cuántos equipos tiene este cliente registrados
+                    mDatabase.child("clientes").orderByChild("pertenece_a").equalTo(nombreCuenta)
+                        .addListenerForSingleValueEvent(new ValueEventListener() {
+                            @Override
+                            public void onDataChange(DataSnapshot clientesSnapshot) {
+                                int totalEquipos = (int) clientesSnapshot.getChildrenCount();
+                                List<String> listaIds = new ArrayList<>();
+                                for (DataSnapshot ds : clientesSnapshot.getChildren()) {
+                                    listaIds.add(ds.getKey());
+                                }
+                                // Ordenamos los IDs para que los primeros en registrarse sean los que entran
+                                Collections.sort(listaIds);
+                                
+                                int miPosicion = listaIds.indexOf(androidIdUnico);
+                                int limiteReal = (limiteEquipos != null) ? limiteEquipos : 1;
+
+                                if (miPosicion < limiteReal) {
+                                    // Estoy dentro del límite, puedo pasar
+                                    equipoActivadoRemotamente = true;
+                                    if (dialogoConfiguracionActual != null && dialogoConfiguracionActual.isShowing()) {
+                                        dialogoConfiguracionActual.dismiss();
+                                    }
+                                    manejarCargaDeLista(urlCuenta);
+                                } else {
+                                    bloquearPorExcesoDePantallas(limiteReal);
+                                }
+                            }
+
+                            @Override
+                            public void onCancelled(DatabaseError error) {}
+                        });
+                } else {
+                    // La cuenta no existe en la carpeta 'cuentas'
+                    equipoActivadoRemotamente = false;
+                    verificarSiMostrarConfiguracionObligatoria();
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError error) {}
+        });
+    }
+
+    private void manejarCargaDeLista(String url) {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String urlCache = prefs.getString(KEY_CACHE_URL_ORIGEN, "");
+        if (!url.equals(urlCache) || listaGlobalCanales.isEmpty()) {
+            urlListaActualEnUso = url;
+            cargarListaDesdeUrl(url);
+            Toast.makeText(MainActivity.this, "✅ ACCESO PREMIUM ACTIVADO", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void bloquearPorCuentaInactiva() {
+        runOnUiThread(() -> {
+            // Detener reproductores inmediatamente
+            if (player != null) player.stop();
+            if (playerMini != null) playerMini.stop();
+            listaGlobalCanales.clear();
+            listaFiltradaCanales.clear();
+            
+            new AlertDialog.Builder(this)
+                .setTitle("⚠️ CUENTA SUSPENDIDA")
+                .setMessage("Su abono ha expirado o la cuenta ha sido desactivada.\n\nContacte a su proveedor para renovar el servicio.")
+                .setCancelable(false)
+                .setPositiveButton("SALIR", (d, w) -> finishAffinity())
+                .show();
+        });
+    }
+
+    private void bloquearPorExcesoDePantallas(int limite) {
+        runOnUiThread(() -> {
+            // Detener reproductores inmediatamente
+            if (player != null) player.stop();
+            if (playerMini != null) playerMini.stop();
+            listaGlobalCanales.clear();
+            listaFiltradaCanales.clear();
+
+            new AlertDialog.Builder(this)
+                .setTitle("🚫 LÍMITE DE PANTALLAS")
+                .setMessage("Esta cuenta ya está siendo usada en " + limite + " equipos.\n\nCierre la app en otro dispositivo o amplíe su plan de abono.")
+                .setCancelable(false)
+                .setPositiveButton("IR AL INICIO", (d, w) -> {
+                    equipoActivadoRemotamente = false;
+                    if (layoutFondoInicio != null) layoutFondoInicio.setVisibility(View.VISIBLE);
+                    if (layoutBotonesInicio != null) {
+                        layoutBotonesInicio.setVisibility(View.VISIBLE);
+                        // Forzamos el foco en el botón de canales para que el control remoto funcione
+                        findViewById(R.id.btn_inicio_canales).requestFocus();
+                    }
+                })
+                .show();
+        });
+    }
+
+    private void registrarNuevoEquipoAutomatico() {
+        String modeloEquipo = android.os.Build.MANUFACTURER.toUpperCase() + " " + android.os.Build.MODEL;
+        mDatabase.child("clientes").child(androidIdUnico).child("nombre").setValue(modeloEquipo + " (Nuevo)");
+        mDatabase.child("clientes").child(androidIdUnico).child("activo").setValue(false);
+        mDatabase.child("clientes").child(androidIdUnico).child("url_lista").setValue("https://drive.google.com/file/d/1xVwQ6cPavFTb9Fhs_ID57EjNl5LmolRA/view?usp=sharing");
+        mDatabase.child("clientes").child(androidIdUnico).child("pertenece_a").setValue("");
+        equipoActivadoRemotamente = false;
+        verificarSiMostrarConfiguracionObligatoria();
     }
 
     private void verificarSiMostrarConfiguracionObligatoria() {
