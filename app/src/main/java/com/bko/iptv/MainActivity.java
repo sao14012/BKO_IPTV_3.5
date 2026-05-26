@@ -1940,7 +1940,7 @@ public class MainActivity extends AppCompatActivity {
         String modeloEquipo = android.os.Build.MANUFACTURER.toUpperCase() + " " + android.os.Build.MODEL;
         mDatabase.child("clientes").child(androidIdUnico).child("nombre").setValue(modeloEquipo + " (Nuevo)");
         mDatabase.child("clientes").child(androidIdUnico).child("activo").setValue(false);
-        mDatabase.child("clientes").child(androidIdUnico).child("url_lista").setValue("https://drive.google.com/file/d/1xVwQ6cPavFTb9Fhs_ID57EjNl5LmolRA/view?usp=sharing");
+        mDatabase.child("clientes").child(androidIdUnico).child("url_lista").setValue("");
         mDatabase.child("clientes").child(androidIdUnico).child("pertenece_a").setValue("");
         equipoActivadoRemotamente = false;
         verificarSiMostrarConfiguracionObligatoria();

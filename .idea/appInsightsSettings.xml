@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.bko.iptv" />
+                  <option name="mobileSdkAppId" value="1:718395911508:android:abd50771cbd91927306cc1" />
+                  <option name="projectId" value="bko-iptv" />
+                  <option name="projectNumber" value="718395911508" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
