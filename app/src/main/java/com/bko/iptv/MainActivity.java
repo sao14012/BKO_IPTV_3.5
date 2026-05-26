@@ -13,6 +13,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
@@ -91,6 +92,14 @@ public class MainActivity extends AppCompatActivity {
     private View contenedorAjusteBrillo;
     private TextView textValorBrillo;
     private int nivelBrilloActual = 100; // 0 a 100
+    private TextView textRelojDigital;
+    private TextView textCiudadClima;
+    private TextView textFechaActual;
+    private String temperaturaActual = "";
+    private String ciudadActual = "";
+    private boolean verReloj = true, verClima = true, verCiudad = true, verFecha = true;
+    private boolean posicionArriba = false;
+    private final Handler relojHandler = new Handler(Looper.getMainLooper());
     private ListView listViewConfiguracion;
     private String nombreListaActualEnUso = "BKO IPTV";
     private String claveAdultos = "0000";
@@ -174,6 +183,13 @@ public class MainActivity extends AppCompatActivity {
         overlayBrillo = findViewById(R.id.overlay_brillo);
         contenedorAjusteBrillo = findViewById(R.id.contenedor_ajuste_brillo);
         textValorBrillo = findViewById(R.id.text_valor_brillo);
+        textRelojDigital = findViewById(R.id.text_reloj_digital);
+        textCiudadClima = findViewById(R.id.text_ciudad_clima);
+        textFechaActual = findViewById(R.id.text_fecha_actual);
+        
+        cargarPreferenciasVisualizacion();
+        iniciarActualizacionReloj();
+        actualizarClima();
         
         findViewById(R.id.btn_cerrar_brillo).setOnClickListener(v -> cerrarAjusteBrillo());
         
@@ -253,10 +269,21 @@ public class MainActivity extends AppCompatActivity {
         }, 3000);
 
         try {
-            DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(15000, 50000, 2500, 5000).build();
+            // Configuramos el selector de pistas para forzar máxima calidad
+            com.google.android.exoplayer2.trackselection.DefaultTrackSelector trackSelector = 
+                new com.google.android.exoplayer2.trackselection.DefaultTrackSelector(this);
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                .setMaxVideoSizeSd() // Esto es un truco: le decimos que el máximo sea gigante para que elija HD
+                .setForceHighestSupportedBitrate(true));
 
-            player = new ExoPlayer.Builder(this).setLoadControl(loadControl).build();
+            DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(20000, 60000, 2500, 5000).build();
+
+            player = new ExoPlayer.Builder(this)
+                    .setTrackSelector(trackSelector)
+                    .setLoadControl(loadControl)
+                    .build();
+
             playerView.setPlayer(player);
             playerView.setUseController(false);
             player.setRepeatMode(Player.REPEAT_MODE_OFF);
@@ -563,6 +590,145 @@ public class MainActivity extends AppCompatActivity {
                 .edit()
                 .putInt("nivel_brillo_manual", nivelBrilloActual)
                 .apply();
+    }
+
+    private void iniciarActualizacionReloj() {
+        relojHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                // Actualizar Reloj
+                if (textRelojDigital != null) {
+                    textRelojDigital.setVisibility(verReloj ? View.VISIBLE : View.GONE);
+                    java.text.SimpleDateFormat sdfHora = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+                    String horaStr = sdfHora.format(new java.util.Date());
+                    
+                    if (verClima && !temperaturaActual.isEmpty()) {
+                        textRelojDigital.setText(horaStr + " | " + temperaturaActual);
+                    } else {
+                        textRelojDigital.setText(horaStr);
+                    }
+                }
+                
+                // Actualizar Ciudad
+                if (textCiudadClima != null) {
+                    textCiudadClima.setVisibility(verCiudad ? View.VISIBLE : View.GONE);
+                    textCiudadClima.setText(ciudadActual);
+                }
+
+                // Actualizar Fecha
+                if (textFechaActual != null) {
+                    textFechaActual.setVisibility(verFecha ? View.VISIBLE : View.GONE);
+                    java.text.SimpleDateFormat sdfFecha = new java.text.SimpleDateFormat("dd/MM/yy", java.util.Locale.getDefault());
+                    textFechaActual.setText(sdfFecha.format(new java.util.Date()));
+                }
+
+                relojHandler.postDelayed(this, 30000);
+            }
+        });
+    }
+
+    private void cargarPreferenciasVisualizacion() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        verReloj = prefs.getBoolean("ver_reloj", true);
+        verClima = prefs.getBoolean("ver_clima", true);
+        verCiudad = prefs.getBoolean("ver_ciudad", true);
+        verFecha = prefs.getBoolean("ver_fecha", true);
+        posicionArriba = prefs.getBoolean("posicion_arriba", false);
+        
+        // Aplicar posición inicial después de un pequeño retraso para asegurar que las vistas existan
+        new Handler(Looper.getMainLooper()).postDelayed(this::aplicarPosicionVisual, 500);
+    }
+
+    private void aplicarPosicionVisual() {
+        View layoutClima = findViewById(R.id.layout_info_clima);
+        View viewFecha = findViewById(R.id.text_fecha_actual);
+        
+        if (layoutClima != null && viewFecha != null) {
+            FrameLayout.LayoutParams paramsClima = (FrameLayout.LayoutParams) layoutClima.getLayoutParams();
+            FrameLayout.LayoutParams paramsFecha = (FrameLayout.LayoutParams) viewFecha.getLayoutParams();
+            
+            // Los márgenes originales son 25dp, los convertimos a píxeles aproximadamente para el top
+            int margenPx = (int) (25 * getResources().getDisplayMetrics().density);
+
+            if (posicionArriba) {
+                paramsClima.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
+                paramsFecha.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+                paramsClima.topMargin = margenPx;
+                paramsFecha.topMargin = margenPx;
+                paramsClima.bottomMargin = 0;
+                paramsFecha.bottomMargin = 0;
+            } else {
+                paramsClima.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.START;
+                paramsFecha.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+                paramsClima.bottomMargin = margenPx;
+                paramsFecha.bottomMargin = margenPx;
+                paramsClima.topMargin = 0;
+                paramsFecha.topMargin = 0;
+            }
+            
+            layoutClima.setLayoutParams(paramsClima);
+            viewFecha.setLayoutParams(paramsFecha);
+        }
+    }
+
+    private void mostrarMenuAjustesPantalla() {
+        String[] opciones = {
+                (verReloj ? "✅" : "❌") + " Ver Reloj",
+                (verClima ? "✅" : "❌") + " Ver Clima",
+                (verCiudad ? "✅" : "❌") + " Ver Ciudad",
+                (verFecha ? "✅" : "❌") + " Ver Fecha",
+                "📍 Ubicación: " + (posicionArriba ? "ARRIBA" : "ABAJO")
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("📺 Ajustes de Pantalla")
+                .setItems(opciones, (dialog, which) -> {
+                    SharedPreferences.Editor editor = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+                    switch (which) {
+                        case 0: verReloj = !verReloj; editor.putBoolean("ver_reloj", verReloj); break;
+                        case 1: verClima = !verClima; editor.putBoolean("ver_clima", verClima); break;
+                        case 2: verCiudad = !verCiudad; editor.putBoolean("ver_ciudad", verCiudad); break;
+                        case 3: verFecha = !verFecha; editor.putBoolean("ver_fecha", verFecha); break;
+                        case 4: 
+                            posicionArriba = !posicionArriba; 
+                            editor.putBoolean("posicion_arriba", posicionArriba);
+                            aplicarPosicionVisual();
+                            break;
+                    }
+                    editor.apply();
+                    mostrarMenuAjustesPantalla(); // Recargar el menú para ver el cambio
+                })
+                .setPositiveButton("LISTO", null)
+                .show();
+    }
+
+    private void actualizarClima() {
+        new Thread(() -> {
+            try {
+                // wttr.in detecta ciudad, temperatura e icono. 
+                // ?format=%l:+%t+%c devuelve ej: "Buenos Aires: 22°C ☀️"
+                java.net.URL url = new java.net.URL("https://wttr.in?format=%l:+%t+%c");
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+
+                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
+                String linea = reader.readLine();
+                if (linea != null && linea.contains(":")) {
+                    String[] partes = linea.split(":");
+                    ciudadActual = partes[0].trim().toUpperCase();
+                    temperaturaActual = partes[1].replace("+", "").trim();
+                }
+                reader.close();
+                conn.disconnect();
+            } catch (Exception e) {
+                // Si falla el clima, la app sigue funcionando solo con el reloj
+            }
+            
+            // Reintentar cada 1 hora (3,600,000 ms)
+            relojHandler.postDelayed(this::actualizarClima, 3600000);
+        }).start();
     }
 
     private boolean esGrupoAdulto(String grupo) {
@@ -1128,6 +1294,7 @@ public class MainActivity extends AppCompatActivity {
         String[] titulos = {
                 "📂 Gestión de Listas IPTV",
                 "🔄 Actualizar Canales",
+                "📺 Ajustes de Pantalla",
                 "🔄 Recargar Lista Actual",
                 "☀ Ajuste de Brillo",
                 "🔞 Control Parental (Adultos)",
@@ -1138,6 +1305,7 @@ public class MainActivity extends AppCompatActivity {
         String[] descripciones = {
                 "Añade, edita o elimina tus listas M3U.",
                 "Forzar descarga de canales desde el servidor.",
+                "Mostrar/Ocultar Reloj, Clima, Ciudad y Fecha.",
                 "Actualiza los canales de la lista en uso.",
                 "Controla la intensidad de luz de la pantalla.",
                 "Configura la clave para contenido sensible.",
@@ -1182,22 +1350,25 @@ public class MainActivity extends AppCompatActivity {
                     }
                     break;
                 case 2:
+                    mostrarMenuAjustesPantalla();
+                    break;
+                case 3:
                     if (!urlListaActualEnUso.isEmpty()) {
                         cargarListaDesdeUrl(urlListaActualEnUso);
                         Toast.makeText(MainActivity.this, "Actualizando canales...", Toast.LENGTH_SHORT).show();
                         alternarMenuConfiguracion();
                     }
                     break;
-                case 3:
+                case 4:
                     activarModoAjusteBrillo();
                     break;
-                case 4:
+                case 5:
                     verificarClaveAdultos();
                     break;
-                case 5:
+                case 6:
                     mostrarGuiaControles();
                     break;
-                case 6:
+                case 7:
                     String androidId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
                     new AlertDialog.Builder(MainActivity.this)
                             .setTitle("BKO IPTV 3.5")
