@@ -25,6 +25,11 @@ import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.pm.PackageManager;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import android.location.Location;
+import android.location.LocationManager;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -50,6 +55,7 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ServerValue;
 import com.google.firebase.database.ValueEventListener;
 
 import org.json.JSONArray;
@@ -94,11 +100,12 @@ public class MainActivity extends AppCompatActivity {
     private int nivelBrilloActual = 100; // 0 a 100
     private TextView textRelojDigital;
     private TextView textCiudadClima;
-    private TextView textFechaActual;
+    private TextView textFechaDerecha;
+    private TextView textFechaBloque;
     private String temperaturaActual = "";
     private String ciudadActual = "";
     private boolean verReloj = true, verClima = true, verCiudad = true, verFecha = true;
-    private boolean posicionArriba = false;
+    private int alineacionBloqueActual = 0; // 0 a 7
     private final Handler relojHandler = new Handler(Looper.getMainLooper());
     private ListView listViewConfiguracion;
     private String nombreListaActualEnUso = "BKO IPTV";
@@ -140,6 +147,8 @@ public class MainActivity extends AppCompatActivity {
     private String urlListaActualEnUso = "";
     private String androidIdUnico = "";
     private DatabaseReference mDatabase;
+    private ValueEventListener accountListener;
+    private DatabaseReference currentAccountRef;
     private boolean equipoActivadoRemotamente = false;
     private androidx.appcompat.app.AlertDialog dialogoConfiguracionActual;
     
@@ -185,11 +194,12 @@ public class MainActivity extends AppCompatActivity {
         textValorBrillo = findViewById(R.id.text_valor_brillo);
         textRelojDigital = findViewById(R.id.text_reloj_digital);
         textCiudadClima = findViewById(R.id.text_ciudad_clima);
-        textFechaActual = findViewById(R.id.text_fecha_actual);
+        textFechaDerecha = findViewById(R.id.text_fecha_derecha);
+        textFechaBloque = findViewById(R.id.text_fecha_bloque);
         
         cargarPreferenciasVisualizacion();
         iniciarActualizacionReloj();
-        actualizarClima();
+        verificarPermisosUbicacion();
         
         findViewById(R.id.btn_cerrar_brillo).setOnClickListener(v -> cerrarAjusteBrillo());
         
@@ -237,7 +247,8 @@ public class MainActivity extends AppCompatActivity {
         playerView.setKeepScreenOn(true);
 
         mDatabase = FirebaseDatabase.getInstance().getReference();
-        androidIdUnico = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID).toUpperCase();
+        String rawId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+        androidIdUnico = (rawId != null) ? rawId.toUpperCase() : "EQUIPO_DESCONOCIDO";
         verificarActivacionEquipo();
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -596,34 +607,42 @@ public class MainActivity extends AppCompatActivity {
         relojHandler.post(new Runnable() {
             @Override
             public void run() {
-                // Actualizar Reloj
-                if (textRelojDigital != null) {
-                    textRelojDigital.setVisibility(verReloj ? View.VISIBLE : View.GONE);
-                    java.text.SimpleDateFormat sdfHora = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
-                    String horaStr = sdfHora.format(new java.util.Date());
-                    
-                    if (verClima && !temperaturaActual.isEmpty()) {
-                        textRelojDigital.setText(horaStr + " | " + temperaturaActual);
-                    } else {
-                        textRelojDigital.setText(horaStr);
-                    }
-                }
-                
-                // Actualizar Ciudad
-                if (textCiudadClima != null) {
-                    textCiudadClima.setVisibility(verCiudad ? View.VISIBLE : View.GONE);
-                    textCiudadClima.setText(ciudadActual);
-                }
-
-                // Actualizar Fecha
-                if (textFechaActual != null) {
-                    textFechaActual.setVisibility(verFecha ? View.VISIBLE : View.GONE);
-                    java.text.SimpleDateFormat sdfFecha = new java.text.SimpleDateFormat("dd/MM/yy", java.util.Locale.getDefault());
-                    textFechaActual.setText(sdfFecha.format(new java.util.Date()));
-                }
-
+                actualizarTextosPantalla();
                 relojHandler.postDelayed(this, 30000);
             }
+        });
+    }
+
+    private void actualizarTextosPantalla() {
+        runOnUiThread(() -> {
+            // 1. Actualizar Reloj y Clima
+            if (textRelojDigital != null) {
+                textRelojDigital.setVisibility(verReloj ? View.VISIBLE : View.GONE);
+                java.text.SimpleDateFormat sdfHora = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+                String horaStr = sdfHora.format(new java.util.Date());
+                
+                if (verClima && temperaturaActual != null && !temperaturaActual.isEmpty()) {
+                    textRelojDigital.setText(horaStr + " | " + temperaturaActual);
+                } else {
+                    textRelojDigital.setText(horaStr);
+                }
+            }
+            
+            // 2. Actualizar Ciudad
+            if (textCiudadClima != null) {
+                if (verCiudad && ciudadActual != null && !ciudadActual.isEmpty()) {
+                    textCiudadClima.setVisibility(View.VISIBLE);
+                    textCiudadClima.setText(ciudadActual);
+                } else {
+                    textCiudadClima.setVisibility(View.GONE);
+                }
+            }
+
+            // 3. Actualizar Fecha
+            java.text.SimpleDateFormat sdfFecha = new java.text.SimpleDateFormat("dd/MM/yy", java.util.Locale.getDefault());
+            String fechaStr = sdfFecha.format(new java.util.Date());
+            if (textFechaDerecha != null) textFechaDerecha.setText(fechaStr);
+            if (textFechaBloque != null) textFechaBloque.setText(fechaStr);
         });
     }
 
@@ -633,51 +652,94 @@ public class MainActivity extends AppCompatActivity {
         verClima = prefs.getBoolean("ver_clima", true);
         verCiudad = prefs.getBoolean("ver_ciudad", true);
         verFecha = prefs.getBoolean("ver_fecha", true);
-        posicionArriba = prefs.getBoolean("posicion_arriba", false);
+        alineacionBloqueActual = prefs.getInt("alineacion_bloque_v3", 0);
         
         // Aplicar posición inicial después de un pequeño retraso para asegurar que las vistas existan
         new Handler(Looper.getMainLooper()).postDelayed(this::aplicarPosicionVisual, 500);
     }
 
     private void aplicarPosicionVisual() {
-        View layoutClima = findViewById(R.id.layout_info_clima);
-        View viewFecha = findViewById(R.id.text_fecha_actual);
-        
-        if (layoutClima != null && viewFecha != null) {
-            FrameLayout.LayoutParams paramsClima = (FrameLayout.LayoutParams) layoutClima.getLayoutParams();
-            FrameLayout.LayoutParams paramsFecha = (FrameLayout.LayoutParams) viewFecha.getLayoutParams();
-            
-            // Los márgenes originales son 25dp, los convertimos a píxeles aproximadamente para el top
-            int margenPx = (int) (25 * getResources().getDisplayMetrics().density);
+        View layoutBloque = findViewById(R.id.layout_info_bloque);
+        if (layoutBloque == null || textFechaDerecha == null || textFechaBloque == null) return;
 
-            if (posicionArriba) {
-                paramsClima.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
-                paramsFecha.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
-                paramsClima.topMargin = margenPx;
-                paramsFecha.topMargin = margenPx;
-                paramsClima.bottomMargin = 0;
-                paramsFecha.bottomMargin = 0;
-            } else {
-                paramsClima.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.START;
-                paramsFecha.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
-                paramsClima.bottomMargin = margenPx;
-                paramsFecha.bottomMargin = margenPx;
-                paramsClima.topMargin = 0;
-                paramsFecha.topMargin = 0;
-            }
-            
-            layoutClima.setLayoutParams(paramsClima);
-            viewFecha.setLayoutParams(paramsFecha);
+        FrameLayout.LayoutParams paramsBloque = (FrameLayout.LayoutParams) layoutBloque.getLayoutParams();
+        FrameLayout.LayoutParams paramsFechaDer = (FrameLayout.LayoutParams) textFechaDerecha.getLayoutParams();
+        LinearLayout container = (LinearLayout) layoutBloque;
+
+        int gravBloque, gravTexto, gravFechaDer;
+        boolean esRepartido = (alineacionBloqueActual == 0 || alineacionBloqueActual == 4);
+
+        switch (alineacionBloqueActual) {
+            case 0: // ABAJO - REPARTIDO
+                gravBloque = android.view.Gravity.BOTTOM | android.view.Gravity.START;
+                gravFechaDer = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+                gravTexto = android.view.Gravity.START;
+                break;
+            case 1: // ABAJO - IZQUIERDA
+                gravBloque = android.view.Gravity.BOTTOM | android.view.Gravity.START;
+                gravFechaDer = gravBloque; gravTexto = android.view.Gravity.START;
+                break;
+            case 2: // ABAJO - CENTRO
+                gravBloque = android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL;
+                gravFechaDer = gravBloque; gravTexto = android.view.Gravity.CENTER_HORIZONTAL;
+                break;
+            case 3: // ABAJO - DERECHA
+                gravBloque = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+                gravFechaDer = gravBloque; gravTexto = android.view.Gravity.END;
+                break;
+            case 4: // ARRIBA - REPARTIDO
+                gravBloque = android.view.Gravity.TOP | android.view.Gravity.START;
+                gravFechaDer = android.view.Gravity.TOP | android.view.Gravity.END;
+                gravTexto = android.view.Gravity.START;
+                break;
+            case 5: // ARRIBA - IZQUIERDA
+                gravBloque = android.view.Gravity.TOP | android.view.Gravity.START;
+                gravFechaDer = gravBloque; gravTexto = android.view.Gravity.START;
+                break;
+            case 6: // ARRIBA - CENTRO
+                gravBloque = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
+                gravFechaDer = gravBloque; gravTexto = android.view.Gravity.CENTER_HORIZONTAL;
+                break;
+            case 7: // ARRIBA - DERECHA
+                gravBloque = android.view.Gravity.TOP | android.view.Gravity.END;
+                gravFechaDer = gravBloque; gravTexto = android.view.Gravity.END;
+                break;
+            default:
+                gravBloque = android.view.Gravity.BOTTOM | android.view.Gravity.START;
+                gravFechaDer = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+                gravTexto = android.view.Gravity.START;
+                break;
+        }
+
+        paramsBloque.gravity = gravBloque;
+        paramsFechaDer.gravity = gravFechaDer;
+        layoutBloque.setLayoutParams(paramsBloque);
+        textFechaDerecha.setLayoutParams(paramsFechaDer);
+        container.setGravity(gravTexto);
+
+        // Controlar qué fecha se ve y visibilidad general
+        textFechaBloque.setVisibility((verFecha && !esRepartido) ? View.VISIBLE : View.GONE);
+        textFechaDerecha.setVisibility((verFecha && esRepartido) ? View.VISIBLE : View.GONE);
+
+        // Alinear los textos internamente
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (child instanceof TextView) ((TextView) child).setGravity(gravTexto);
         }
     }
 
     private void mostrarMenuAjustesPantalla() {
+        String[] nombresPosiciones = {
+            "ABAJO - REPARTIDO", "ABAJO - IZQUIERDA", "ABAJO - CENTRO", "ABAJO - DERECHA",
+            "ARRIBA - REPARTIDO", "ARRIBA - IZQUIERDA", "ARRIBA - CENTRO", "ARRIBA - DERECHA"
+        };
+
         String[] opciones = {
                 (verReloj ? "✅" : "❌") + " Ver Reloj",
                 (verClima ? "✅" : "❌") + " Ver Clima",
                 (verCiudad ? "✅" : "❌") + " Ver Ciudad",
                 (verFecha ? "✅" : "❌") + " Ver Fecha",
-                "📍 Ubicación: " + (posicionArriba ? "ARRIBA" : "ABAJO")
+                "📍 Ubicación: " + nombresPosiciones[alineacionBloqueActual]
         };
 
         new AlertDialog.Builder(this)
@@ -690,45 +752,117 @@ public class MainActivity extends AppCompatActivity {
                         case 2: verCiudad = !verCiudad; editor.putBoolean("ver_ciudad", verCiudad); break;
                         case 3: verFecha = !verFecha; editor.putBoolean("ver_fecha", verFecha); break;
                         case 4: 
-                            posicionArriba = !posicionArriba; 
-                            editor.putBoolean("posicion_arriba", posicionArriba);
-                            aplicarPosicionVisual();
-                            break;
+                            mostrarSubmenuUbicacion();
+                            return; // No cerramos este menú todavía
                     }
                     editor.apply();
+                    aplicarPosicionVisual();
                     mostrarMenuAjustesPantalla(); // Recargar el menú para ver el cambio
                 })
                 .setPositiveButton("LISTO", null)
                 .show();
     }
 
+    private void mostrarSubmenuUbicacion() {
+        String[] nombresPosiciones = {
+            "ABAJO - REPARTIDO", "ABAJO - IZQUIERDA", "ABAJO - CENTRO", "ABAJO - DERECHA",
+            "ARRIBA - REPARTIDO", "ARRIBA - IZQUIERDA", "ARRIBA - CENTRO", "ARRIBA - DERECHA"
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("📍 Seleccionar Ubicación")
+                .setItems(nombresPosiciones, (dialog, which) -> {
+                    alineacionBloqueActual = which;
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit().putInt("alineacion_bloque_v3", alineacionBloqueActual).apply();
+                    aplicarPosicionVisual();
+                    mostrarMenuAjustesPantalla(); // Volver al menú anterior
+                })
+                .setNegativeButton("ATRÁS", (dialog, which) -> mostrarMenuAjustesPantalla())
+                .show();
+    }
+
+    private void verificarPermisosUbicacion() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.ACCESS_COARSE_LOCATION}, 100);
+        } else {
+            actualizarClima();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 100 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            actualizarClima();
+        } else {
+            // Si el usuario rechaza, intentamos por IP de todos modos
+            actualizarClima();
+        }
+    }
+
     private void actualizarClima() {
         new Thread(() -> {
             try {
-                // wttr.in detecta ciudad, temperatura e icono. 
-                // ?format=%l:+%t+%c devuelve ej: "Buenos Aires: 22°C ☀️"
-                java.net.URL url = new java.net.URL("https://wttr.in?format=%l:+%t+%c");
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
+                // PASO 1: Obtener Ciudad y Coordenadas por IP (Muy compatible)
+                java.net.URL urlIp = new java.net.URL("http://ip-api.com/json");
+                java.net.HttpURLConnection connIp = (java.net.HttpURLConnection) urlIp.openConnection();
+                connIp.setRequestMethod("GET");
+                connIp.setConnectTimeout(8000);
+                
+                java.io.BufferedReader readerIp = new java.io.BufferedReader(new java.io.InputStreamReader(connIp.getInputStream()));
+                StringBuilder resIp = new StringBuilder();
+                String lineIp;
+                while ((lineIp = readerIp.readLine()) != null) resIp.append(lineIp);
+                readerIp.close();
+                
+                org.json.JSONObject jsonIp = new org.json.JSONObject(resIp.toString());
+                ciudadActual = jsonIp.getString("city").toUpperCase();
+                double lat = jsonIp.getDouble("lat");
+                double lon = jsonIp.getDouble("lon");
 
-                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
-                String linea = reader.readLine();
-                if (linea != null && linea.contains(":")) {
-                    String[] partes = linea.split(":");
-                    ciudadActual = partes[0].trim().toUpperCase();
-                    temperaturaActual = partes[1].replace("+", "").trim();
-                }
-                reader.close();
-                conn.disconnect();
+                // PASO 2: Obtener Clima usando esas coordenadas (Open-Meteo)
+                java.net.URL urlW = new java.net.URL("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + "&current_weather=true");
+                java.net.HttpURLConnection connW = (java.net.HttpURLConnection) urlW.openConnection();
+                connW.setRequestMethod("GET");
+                connW.setConnectTimeout(8000);
+
+                java.io.BufferedReader readerW = new java.io.BufferedReader(new java.io.InputStreamReader(connW.getInputStream()));
+                StringBuilder resW = new StringBuilder();
+                String lineW;
+                while ((lineW = readerW.readLine()) != null) resW.append(lineW);
+                readerW.close();
+
+                org.json.JSONObject jsonW = new org.json.JSONObject(resW.toString());
+                org.json.JSONObject current = jsonW.getJSONObject("current_weather");
+                
+                double temp = current.getDouble("temperature");
+                int code = current.getInt("weathercode");
+                String emoji = obtenerEmojiClimaMeteo(code);
+                
+                temperaturaActual = Math.round(temp) + "°C " + emoji;
+                
+                actualizarTextosPantalla();
+
             } catch (Exception e) {
-                // Si falla el clima, la app sigue funcionando solo con el reloj
+                e.printStackTrace();
             }
             
-            // Reintentar cada 1 hora (3,600,000 ms)
+            // Reintentar cada 1 hora
             relojHandler.postDelayed(this::actualizarClima, 3600000);
         }).start();
+    }
+
+    private String obtenerEmojiClimaMeteo(int code) {
+        // Códigos WMO (Open-Meteo)
+        if (code == 0) return "☀️"; // Despejado
+        if (code <= 3) return "⛅"; // Parcialmente nublado
+        if (code <= 48) return "🌫️"; // Niebla
+        if (code <= 67) return "🌧️"; // Lluvia
+        if (code <= 77) return "❄️"; // Nieve
+        if (code <= 82) return "🌧️"; // Chubascos
+        if (code <= 99) return "⛈️"; // Tormenta
+        return "☁️";
     }
 
     private boolean esGrupoAdulto(String grupo) {
@@ -1787,14 +1921,27 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onDataChange(DataSnapshot snapshot) {
                 if (snapshot.exists()) {
-                    // 1. Verificamos si este equipo pertenece a una cuenta grupal
+                    // Limpiamos cualquier escucha de cuenta anterior antes de procesar el cambio
+                    removerEscuchaDeCuenta();
+
+                    Boolean equipoActivo = snapshot.child("activo").getValue(Boolean.class);
                     String cuentaPadre = snapshot.child("pertenece_a").getValue(String.class);
-                    
+                    String urlIndividual = snapshot.child("url_lista").getValue(String.class);
+
+                    // LÓGICA INTELIGENTE PARA PLAY STORE Y ADMIN
+                    if (equipoActivo == null || !equipoActivo) {
+                        equipoActivadoRemotamente = false;
+                        if ((cuentaPadre == null || cuentaPadre.isEmpty()) && (urlIndividual == null || urlIndividual.isEmpty())) {
+                            verificarSiMostrarConfiguracionObligatoria();
+                        } else {
+                            bloquearPorEquipoInactivo();
+                        }
+                        return;
+                    }
+
                     if (cuentaPadre != null && !cuentaPadre.isEmpty()) {
-                        // Es un equipo vinculado a una cuenta (Ej: GUSTAVO)
                         verificarReglasDeCuenta(cuentaPadre);
                     } else {
-                        // Es un equipo individual (como funcionaba antes)
                         procesarActivacionIndividual(snapshot);
                     }
                 } else {
@@ -1806,6 +1953,40 @@ public class MainActivity extends AppCompatActivity {
             public void onCancelled(DatabaseError error) {
                 verificarSiMostrarConfiguracionObligatoria();
             }
+        });
+    }
+
+    private void removerEscuchaDeCuenta() {
+        if (currentAccountRef != null && accountListener != null) {
+            currentAccountRef.removeEventListener(accountListener);
+            currentAccountRef = null;
+            accountListener = null;
+        }
+    }
+
+    private void bloquearPorEquipoInactivo() {
+        runOnUiThread(() -> {
+            // Detener reproductores inmediatamente
+            if (player != null) player.stop();
+            if (playerMini != null) playerMini.stop();
+            listaGlobalCanales.clear();
+            listaFiltradaCanales.clear();
+            
+            if (dialogoConfiguracionActual != null && dialogoConfiguracionActual.isShowing()) return;
+
+            new AlertDialog.Builder(this)
+                .setTitle("⚠️ ACCESO DENEGADO")
+                .setMessage("Este dispositivo no está autorizado o ha sido desactivado.\n\nConsulte con su proveedor.")
+                .setCancelable(false)
+                .setPositiveButton("IR AL INICIO", (d, w) -> {
+                    if (layoutFondoInicio != null) layoutFondoInicio.setVisibility(View.VISIBLE);
+                    if (layoutBotonesInicio != null) {
+                        layoutBotonesInicio.setVisibility(View.VISIBLE);
+                        findViewById(R.id.btn_inicio_canales).requestFocus();
+                    }
+                })
+                .setNegativeButton("SALIR", (d, w) -> finishAffinity())
+                .show();
         });
     }
 
@@ -1828,7 +2009,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void verificarReglasDeCuenta(String nombreCuenta) {
-        mDatabase.child("cuentas").child(nombreCuenta).addValueEventListener(new ValueEventListener() {
+        currentAccountRef = mDatabase.child("cuentas").child(nombreCuenta);
+        accountListener = new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot accountSnapshot) {
                 if (accountSnapshot.exists()) {
@@ -1841,24 +2023,20 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
 
-                    // Ahora contamos cuántos equipos tiene este cliente registrados
                     mDatabase.child("clientes").orderByChild("pertenece_a").equalTo(nombreCuenta)
                         .addListenerForSingleValueEvent(new ValueEventListener() {
                             @Override
                             public void onDataChange(DataSnapshot clientesSnapshot) {
-                                int totalEquipos = (int) clientesSnapshot.getChildrenCount();
                                 List<String> listaIds = new ArrayList<>();
                                 for (DataSnapshot ds : clientesSnapshot.getChildren()) {
                                     listaIds.add(ds.getKey());
                                 }
-                                // Ordenamos los IDs para que los primeros en registrarse sean los que entran
                                 Collections.sort(listaIds);
                                 
                                 int miPosicion = listaIds.indexOf(androidIdUnico);
                                 int limiteReal = (limiteEquipos != null) ? limiteEquipos : 1;
 
                                 if (miPosicion < limiteReal) {
-                                    // Estoy dentro del límite, puedo pasar
                                     equipoActivadoRemotamente = true;
                                     if (dialogoConfiguracionActual != null && dialogoConfiguracionActual.isShowing()) {
                                         dialogoConfiguracionActual.dismiss();
@@ -1873,7 +2051,6 @@ public class MainActivity extends AppCompatActivity {
                             public void onCancelled(DatabaseError error) {}
                         });
                 } else {
-                    // La cuenta no existe en la carpeta 'cuentas'
                     equipoActivadoRemotamente = false;
                     verificarSiMostrarConfiguracionObligatoria();
                 }
@@ -1881,10 +2058,26 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onCancelled(DatabaseError error) {}
-        });
+        };
+        currentAccountRef.addValueEventListener(accountListener);
     }
 
     private void manejarCargaDeLista(String url) {
+        if (url == null || url.isEmpty()) {
+            // Si la URL es vacía, detenemos todo y limpiamos
+            if (player != null) player.stop();
+            if (playerMini != null) playerMini.stop();
+            listaGlobalCanales.clear();
+            listaFiltradaCanales.clear();
+            
+            // Volvemos a mostrar el cartel de inicio
+            if (layoutFondoInicio != null) layoutFondoInicio.setVisibility(View.VISIBLE);
+            if (layoutBotonesInicio != null) layoutBotonesInicio.setVisibility(View.VISIBLE);
+            
+            verificarSiMostrarConfiguracionObligatoria();
+            return;
+        }
+
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String urlCache = prefs.getString(KEY_CACHE_URL_ORIGEN, "");
         if (!url.equals(urlCache) || listaGlobalCanales.isEmpty()) {
@@ -1942,6 +2135,7 @@ public class MainActivity extends AppCompatActivity {
         mDatabase.child("clientes").child(androidIdUnico).child("activo").setValue(false);
         mDatabase.child("clientes").child(androidIdUnico).child("url_lista").setValue("");
         mDatabase.child("clientes").child(androidIdUnico).child("pertenece_a").setValue("");
+        mDatabase.child("clientes").child(androidIdUnico).child("timestamp_registro").setValue(ServerValue.TIMESTAMP);
         equipoActivadoRemotamente = false;
         verificarSiMostrarConfiguracionObligatoria();
     }
