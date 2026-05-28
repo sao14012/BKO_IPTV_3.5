@@ -104,7 +104,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView textFechaBloque;
     private String temperaturaActual = "";
     private String ciudadActual = "";
-    private boolean verReloj = true, verClima = true, verCiudad = true, verFecha = true;
+    private boolean verReloj = true, verClima = true, verCiudad = true, verFecha = true, verPronostico = false;
     private int alineacionBloqueActual = 0; // 0 a 7
     private final Handler relojHandler = new Handler(Looper.getMainLooper());
     private ListView listViewConfiguracion;
@@ -652,6 +652,7 @@ public class MainActivity extends AppCompatActivity {
         verClima = prefs.getBoolean("ver_clima", true);
         verCiudad = prefs.getBoolean("ver_ciudad", true);
         verFecha = prefs.getBoolean("ver_fecha", true);
+        verPronostico = prefs.getBoolean("ver_pronostico_v2", false);
         alineacionBloqueActual = prefs.getInt("alineacion_bloque_v3", 0);
         
         // Aplicar posición inicial después de un pequeño retraso para asegurar que las vistas existan
@@ -739,6 +740,7 @@ public class MainActivity extends AppCompatActivity {
                 (verClima ? "✅" : "❌") + " Ver Clima",
                 (verCiudad ? "✅" : "❌") + " Ver Ciudad",
                 (verFecha ? "✅" : "❌") + " Ver Fecha",
+                (verPronostico ? "✅" : "❌") + " Ver Pronóstico",
                 "📍 Ubicación: " + nombresPosiciones[alineacionBloqueActual]
         };
 
@@ -752,6 +754,12 @@ public class MainActivity extends AppCompatActivity {
                         case 2: verCiudad = !verCiudad; editor.putBoolean("ver_ciudad", verCiudad); break;
                         case 3: verFecha = !verFecha; editor.putBoolean("ver_fecha", verFecha); break;
                         case 4: 
+                            verPronostico = !verPronostico; 
+                            editor.putBoolean("ver_pronostico_v2", verPronostico);
+                            View layoutPron = findViewById(R.id.layout_pronostico_extendido);
+                            if (layoutPron != null) layoutPron.setVisibility(verPronostico ? View.VISIBLE : View.GONE);
+                            break;
+                        case 5:
                             mostrarSubmenuUbicacion();
                             return; // No cerramos este menú todavía
                     }
@@ -804,7 +812,7 @@ public class MainActivity extends AppCompatActivity {
     private void actualizarClima() {
         new Thread(() -> {
             try {
-                // PASO 1: Obtener Ciudad y Coordenadas por IP (Muy compatible)
+                // PASO 1: Obtener Ciudad y Coordenadas por IP
                 java.net.URL urlIp = new java.net.URL("http://ip-api.com/json");
                 java.net.HttpURLConnection connIp = (java.net.HttpURLConnection) urlIp.openConnection();
                 connIp.setRequestMethod("GET");
@@ -821,8 +829,8 @@ public class MainActivity extends AppCompatActivity {
                 double lat = jsonIp.getDouble("lat");
                 double lon = jsonIp.getDouble("lon");
 
-                // PASO 2: Obtener Clima usando esas coordenadas (Open-Meteo)
-                java.net.URL urlW = new java.net.URL("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + "&current_weather=true");
+                // PASO 2: Obtener Clima Actual + Pronóstico 5 días (Open-Meteo)
+                java.net.URL urlW = new java.net.URL("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + "&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto");
                 java.net.HttpURLConnection connW = (java.net.HttpURLConnection) urlW.openConnection();
                 connW.setRequestMethod("GET");
                 connW.setConnectTimeout(8000);
@@ -834,15 +842,24 @@ public class MainActivity extends AppCompatActivity {
                 readerW.close();
 
                 org.json.JSONObject jsonW = new org.json.JSONObject(resW.toString());
+                
+                // Procesar Clima Actual
                 org.json.JSONObject current = jsonW.getJSONObject("current_weather");
+                double tempActual = current.getDouble("temperature");
+                int codeActual = current.getInt("weathercode");
+                temperaturaActual = Math.round(tempActual) + "°C " + obtenerEmojiClimaMeteo(codeActual);
                 
-                double temp = current.getDouble("temperature");
-                int code = current.getInt("weathercode");
-                String emoji = obtenerEmojiClimaMeteo(code);
-                
-                temperaturaActual = Math.round(temp) + "°C " + emoji;
-                
-                actualizarTextosPantalla();
+                // Procesar Pronóstico Extendido
+                org.json.JSONObject daily = jsonW.getJSONObject("daily");
+                org.json.JSONArray dailyTimes = daily.getJSONArray("time");
+                org.json.JSONArray dailyCodes = daily.getJSONArray("weathercode");
+                org.json.JSONArray dailyMaxs = daily.getJSONArray("temperature_2m_max");
+                org.json.JSONArray dailyMins = daily.getJSONArray("temperature_2m_min");
+
+                runOnUiThread(() -> {
+                    actualizarTextosPantalla();
+                    actualizarInterfazPronostico(dailyTimes, dailyCodes, dailyMaxs, dailyMins);
+                });
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -851,6 +868,67 @@ public class MainActivity extends AppCompatActivity {
             // Reintentar cada 1 hora
             relojHandler.postDelayed(this::actualizarClima, 3600000);
         }).start();
+    }
+
+    private void actualizarInterfazPronostico(org.json.JSONArray times, org.json.JSONArray codes, org.json.JSONArray maxs, org.json.JSONArray mins) {
+        LinearLayout layoutPronostico = findViewById(R.id.layout_pronostico_extendido);
+        if (layoutPronostico == null) return;
+        
+        layoutPronostico.removeAllViews();
+        layoutPronostico.setVisibility(verPronostico ? View.VISIBLE : View.GONE);
+
+        // Nombres de los días abreviados
+        String[] diasNombres = {"Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"};
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+
+        try {
+            // Empezamos desde i=1 para mostrar desde MAÑANA (i=0 es hoy)
+            for (int i = 1; i < 6; i++) {
+                String dateStr = times.getString(i);
+                int code = codes.getInt(i);
+                int max = (int) Math.round(maxs.getDouble(i));
+                int min = (int) Math.round(mins.getDouble(i));
+
+                // Obtener nombre del día
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
+                java.util.Date date = sdf.parse(dateStr);
+                if (date != null) cal.setTime(date);
+                String nombreDia = diasNombres[cal.get(java.util.Calendar.DAY_OF_WEEK) - 1];
+
+                // Crear Bloque de Día
+                LinearLayout dayBlock = new LinearLayout(this);
+                dayBlock.setOrientation(LinearLayout.VERTICAL);
+                dayBlock.setGravity(android.view.Gravity.CENTER);
+                dayBlock.setPadding(20, 10, 20, 10);
+                
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                );
+                lp.setMargins(10, 0, 10, 0);
+                dayBlock.setLayoutParams(lp);
+
+                // Línea 1: Icono + Día
+                TextView textUpper = new TextView(this);
+                textUpper.setText(obtenerEmojiClimaMeteo(code) + " " + nombreDia.toUpperCase());
+                textUpper.setTextColor(android.graphics.Color.WHITE);
+                textUpper.setTextSize(11);
+                textUpper.setShadowLayer(3, 1, 1, android.graphics.Color.BLACK);
+                dayBlock.addView(textUpper);
+
+                // Línea 2: Temperaturas
+                TextView textLower = new TextView(this);
+                textLower.setText(min + "/" + max);
+                textLower.setTextColor(android.graphics.Color.parseColor("#BBBBBB"));
+                textLower.setTextSize(10);
+                textLower.setShadowLayer(2, 1, 1, android.graphics.Color.BLACK);
+                dayBlock.addView(textLower);
+
+                layoutPronostico.addView(dayBlock);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private String obtenerEmojiClimaMeteo(int code) {
