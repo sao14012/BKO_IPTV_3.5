@@ -106,10 +106,19 @@ public class MainActivity extends AppCompatActivity {
     private String ciudadActual = "";
     private boolean verReloj = true, verClima = true, verCiudad = true, verFecha = true, verPronostico = false;
     private int alineacionBloqueActual = 0; // 0 a 7
+    private int tamanioPronosticoActual = 1; // 0: CHICO, 1: MEDIANO, 2: GRANDE
     private final Handler relojHandler = new Handler(Looper.getMainLooper());
     private ListView listViewConfiguracion;
     private String nombreListaActualEnUso = "BKO IPTV";
     private String claveAdultos = "0000";
+
+    // Variables para Temporizadores
+    private long sleepMinutosRestantes = 0;
+    private String horaApagadoProgramado = "00:00";
+    private boolean modoApagadoProgramadoActivo = false;
+    private Set<String> diasApagadoProgramado = new HashSet<>();
+    private final Handler temporizadorHandler = new Handler(Looper.getMainLooper());
+    private Runnable temporizadorRunnable;
 
     private static class CanalEstructura {
         String urlStream;
@@ -203,6 +212,7 @@ public class MainActivity extends AppCompatActivity {
         cargarPreferenciasVisualizacion();
         iniciarActualizacionReloj();
         verificarPermisosUbicacion();
+        iniciarMotorTemporizadores();
         
         findViewById(R.id.btn_cerrar_brillo).setOnClickListener(v -> cerrarAjusteBrillo());
         
@@ -677,6 +687,7 @@ public class MainActivity extends AppCompatActivity {
         verFecha = prefs.getBoolean("ver_fecha", true);
         verPronostico = prefs.getBoolean("ver_pronostico_v2", false);
         alineacionBloqueActual = prefs.getInt("alineacion_bloque_v3", 0);
+        tamanioPronosticoActual = prefs.getInt("tamanio_pronostico_v1", 1);
         
         // Aplicar posición inicial después de un pequeño retraso para asegurar que las vistas existan
         new Handler(Looper.getMainLooper()).postDelayed(this::aplicarPosicionVisual, 500);
@@ -752,11 +763,279 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void iniciarMotorTemporizadores() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        horaApagadoProgramado = prefs.getString("hora_apagado_fija", "23:00");
+        modoApagadoProgramadoActivo = prefs.getBoolean("modo_apagado_fijo_activo", false);
+        diasApagadoProgramado = prefs.getStringSet("dias_apagado_fijo", new HashSet<>(java.util.Arrays.asList("1","2","3","4","5","6","7")));
+
+        temporizadorRunnable = new Runnable() {
+            @Override
+            public void run() {
+                revisarTemporizadores();
+                temporizadorHandler.postDelayed(this, 60000); // Revisar cada 1 minuto
+            }
+        };
+        temporizadorHandler.post(temporizadorRunnable);
+    }
+
+    private void revisarTemporizadores() {
+        // 1. Revisar Sleep Rápido
+        if (sleepMinutosRestantes > 0) {
+            sleepMinutosRestantes--;
+            if (sleepMinutosRestantes <= 0) {
+                cerrarAppPorTemporizador("Sleep cumplido");
+                return;
+            } else if (sleepMinutosRestantes <= 2) {
+                Toast.makeText(this, "💤 Sleep: La app se cerrará en " + sleepMinutosRestantes + " min.", Toast.LENGTH_SHORT).show();
+            }
+        }
+
+        // 2. Revisar Apagado Programado
+        if (modoApagadoProgramadoActivo) {
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            int diaHoy = cal.get(java.util.Calendar.DAY_OF_WEEK); // 1:Dom, 2:Lun...
+            String horaActual = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(cal.getTime());
+
+            if (diasApagadoProgramado.contains(String.valueOf(diaHoy)) && horaActual.equals(horaApagadoProgramado)) {
+                cerrarAppPorTemporizador("Horario programado cumplido");
+            }
+        }
+    }
+
+    private void cerrarAppPorTemporizador(String motivo) {
+        Toast.makeText(this, "⏰ Apagado automático: " + motivo, Toast.LENGTH_LONG).show();
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            finishAffinity();
+        }, 3000);
+    }
+
+    private void mostrarMenuTemporizadores() {
+        String[] opciones = {
+            "💤 Sleep Rápido (Cuenta regresiva)",
+            "⏰ Apagado Programado (Rutina Diaria)",
+            "❌ Desactivar todos los temporizadores"
+        };
+
+        new AlertDialog.Builder(this)
+            .setTitle("⏲️ Temporizadores de Apagado")
+            .setItems(opciones, (dialog, which) -> {
+                if (which == 0) mostrarSubmenuSleepRapido();
+                else if (which == 1) mostrarSubmenuApagadoProgramado();
+                else {
+                    sleepMinutosRestantes = 0;
+                    modoApagadoProgramadoActivo = false;
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean("modo_apagado_fijo_activo", false).apply();
+                    Toast.makeText(this, "Temporizadores desactivados", Toast.LENGTH_SHORT).show();
+                }
+            })
+            .show();
+    }
+
+    private void mostrarSubmenuSleepRapido() {
+        String[] tiempos = {"15 Minutos", "30 Minutos", "45 Minutos", "60 Minutos", "90 Minutos", "120 Minutos"};
+        int[] valores = {15, 30, 45, 60, 90, 120};
+
+        new AlertDialog.Builder(this)
+            .setTitle("💤 Seleccionar tiempo de Sleep")
+            .setItems(tiempos, (dialog, which) -> {
+                sleepMinutosRestantes = valores[which];
+                Toast.makeText(this, "💤 La app se cerrará en " + sleepMinutosRestantes + " minutos", Toast.LENGTH_LONG).show();
+            })
+            .setNegativeButton("Atrás", (d, w) -> mostrarMenuTemporizadores())
+            .show();
+    }
+
+    private void mostrarSubmenuApagadoProgramado() {
+        String estado = modoApagadoProgramadoActivo ? "✅ ACTIVO" : "❌ DESACTIVADO";
+        String[] opciones = {
+            "Estado: " + estado,
+            "Hora de cierre: " + horaApagadoProgramado,
+            "Seleccionar días"
+        };
+
+        new AlertDialog.Builder(this)
+            .setTitle("⏰ Rutina de Apagado")
+            .setItems(opciones, (dialog, which) -> {
+                if (which == 0) {
+                    modoApagadoProgramadoActivo = !modoApagadoProgramadoActivo;
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean("modo_apagado_fijo_activo", modoApagadoProgramadoActivo).apply();
+                    mostrarSubmenuApagadoProgramado();
+                } else if (which == 1) {
+                    mostrarDialogoConfigurarHora();
+                } else if (which == 2) {
+                    mostrarDialogoSeleccionarDias();
+                }
+            })
+            .setPositiveButton("LISTO", null)
+            .setNegativeButton("ATRÁS", (d, w) -> mostrarMenuTemporizadores())
+            .show();
+    }
+
+    private void mostrarDialogoConfigurarHora() {
+        String[] partes = horaApagadoProgramado.split(":");
+        final int[] h = {Integer.parseInt(partes[0])};
+        final int[] m = {Integer.parseInt(partes[1])};
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("⏰ Configurar Hora de Cierre");
+
+        LinearLayout mainLayout = new LinearLayout(this);
+        mainLayout.setOrientation(LinearLayout.VERTICAL);
+        mainLayout.setGravity(android.view.Gravity.CENTER);
+        mainLayout.setPadding(40, 40, 40, 40);
+        mainLayout.setBackgroundColor(android.graphics.Color.BLACK);
+
+        LinearLayout pickerLayout = new LinearLayout(this);
+        pickerLayout.setOrientation(LinearLayout.HORIZONTAL);
+        pickerLayout.setGravity(android.view.Gravity.CENTER);
+
+        // Estilo común para HORA y MINUTOS
+        final TextView textH = crearTextoAjustable(String.format(java.util.Locale.getDefault(), "%02d", h[0]));
+        final TextView textSeparador = new TextView(this);
+        textSeparador.setText(":");
+        textSeparador.setTextSize(60);
+        textSeparador.setTextColor(android.graphics.Color.WHITE);
+        final TextView textM = crearTextoAjustable(String.format(java.util.Locale.getDefault(), "%02d", m[0]));
+
+        // Lógica de Teclas para HORA
+        textH.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    h[0] = (h[0] + 1) % 24;
+                    textH.setText(String.format(java.util.Locale.getDefault(), "%02d", h[0]));
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    h[0] = (h[0] - 1 + 24) % 24;
+                    textH.setText(String.format(java.util.Locale.getDefault(), "%02d", h[0]));
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    textM.requestFocus();
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    textM.requestFocus();
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        // Lógica de Teclas para MINUTOS
+        textM.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    m[0] = (m[0] + 5) % 60;
+                    textM.setText(String.format(java.util.Locale.getDefault(), "%02d", m[0]));
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    m[0] = (m[0] - 5 + 60) % 60;
+                    textM.setText(String.format(java.util.Locale.getDefault(), "%02d", m[0]));
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    textH.requestFocus();
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    // Al dar OK, va al botón de abajo
+                    return false; // Deja que el sistema mueva el foco al primer botón
+                }
+            }
+            return false;
+        });
+
+        pickerLayout.addView(textH);
+        pickerLayout.addView(textSeparador);
+        pickerLayout.addView(textM);
+        mainLayout.addView(pickerLayout);
+
+        TextView hint = new TextView(this);
+        hint.setText("Flechas: Ajustar y Mover | OK: Siguiente");
+        hint.setGravity(android.view.Gravity.CENTER);
+        hint.setTextColor(android.graphics.Color.GRAY);
+        hint.setPadding(0, 20, 0, 0);
+        mainLayout.addView(hint);
+
+        builder.setView(mainLayout);
+        builder.setPositiveButton("GUARDAR", (dialog, which) -> {
+            horaApagadoProgramado = String.format(java.util.Locale.getDefault(), "%02d:%02d", h[0], m[0]);
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString("hora_apagado_fija", horaApagadoProgramado).apply();
+            Toast.makeText(this, "Horario guardado: " + horaApagadoProgramado, Toast.LENGTH_SHORT).show();
+            mostrarSubmenuApagadoProgramado();
+        });
+        builder.setNegativeButton("CANCELAR", (d, w) -> mostrarSubmenuApagadoProgramado());
+        
+        final AlertDialog dialog = builder.create();
+        dialog.show();
+
+        // Forzamos el foco inicial
+        textH.post(() -> textH.requestFocus());
+    }
+
+    private TextView crearTextoAjustable(String inicial) {
+        TextView tv = new TextView(this);
+        tv.setText(inicial);
+        tv.setTextSize(60);
+        tv.setTextColor(android.graphics.Color.YELLOW);
+        tv.setFocusable(true);
+        tv.setFocusableInTouchMode(true);
+        tv.setPadding(20, 10, 20, 10);
+        
+        // Efecto visual cuando tiene el foco
+        tv.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                tv.setBackgroundColor(android.graphics.Color.parseColor("#33FFFFFF"));
+                tv.setTextColor(android.graphics.Color.CYAN);
+            } else {
+                tv.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                tv.setTextColor(android.graphics.Color.YELLOW);
+            }
+        });
+        return tv;
+    }
+
+    private android.widget.Button crearBotonAjuste(String texto, View.OnClickListener click) {
+        android.widget.Button btn = new android.widget.Button(this);
+        btn.setText(texto);
+        btn.setTextSize(20);
+        btn.setFocusable(true);
+        btn.setOnClickListener(click);
+        return btn;
+    }
+
+    private LinearLayout crearColumnaAjuste(android.widget.Button up, android.widget.Button down) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.addView(up);
+        col.addView(down);
+        return col;
+    }
+
+    private void mostrarDialogoSeleccionarDias() {
+        String[] nombresDias = {"Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"};
+        boolean[] seleccionados = new boolean[7];
+        for (int i = 0; i < 7; i++) {
+            seleccionados[i] = diasApagadoProgramado.contains(String.valueOf(i + 1));
+        }
+
+        new AlertDialog.Builder(this)
+            .setTitle("Seleccionar días activos")
+            .setMultiChoiceItems(nombresDias, seleccionados, (dialog, which, isChecked) -> {
+                String diaId = String.valueOf(which + 1);
+                if (isChecked) diasApagadoProgramado.add(diaId);
+                else diasApagadoProgramado.remove(diaId);
+            })
+            .setPositiveButton("Guardar", (dialog, which) -> {
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putStringSet("dias_apagado_fijo", diasApagadoProgramado).apply();
+                mostrarSubmenuApagadoProgramado();
+            })
+            .show();
+    }
+
     private void mostrarMenuAjustesPantalla() {
         String[] nombresPosiciones = {
             "ABAJO - REPARTIDO", "ABAJO - IZQUIERDA", "ABAJO - CENTRO", "ABAJO - DERECHA",
             "ARRIBA - REPARTIDO", "ARRIBA - IZQUIERDA", "ARRIBA - CENTRO", "ARRIBA - DERECHA"
         };
+        String[] nombresTamanios = {"CHICO", "MEDIANO", "GRANDE"};
 
         String[] opciones = {
                 (verReloj ? "✅" : "❌") + " Ver Reloj",
@@ -764,6 +1043,7 @@ public class MainActivity extends AppCompatActivity {
                 (verCiudad ? "✅" : "❌") + " Ver Ciudad",
                 (verFecha ? "✅" : "❌") + " Ver Fecha",
                 (verPronostico ? "✅" : "❌") + " Ver Pronóstico",
+                "📐 Tamaño Pronóstico: " + nombresTamanios[tamanioPronosticoActual],
                 "📍 Ubicación: " + nombresPosiciones[alineacionBloqueActual]
         };
 
@@ -779,18 +1059,38 @@ public class MainActivity extends AppCompatActivity {
                         case 4: 
                             verPronostico = !verPronostico; 
                             editor.putBoolean("ver_pronostico_v2", verPronostico);
-                            View layoutPron = findViewById(R.id.layout_pronostico_extendido);
-                            if (layoutPron != null) layoutPron.setVisibility(verPronostico ? View.VISIBLE : View.GONE);
                             break;
                         case 5:
+                            mostrarSubmenuTamanioPronostico();
+                            return;
+                        case 6:
                             mostrarSubmenuUbicacion();
-                            return; // No cerramos este menú todavía
+                            return; 
                     }
                     editor.apply();
                     aplicarPosicionVisual();
-                    mostrarMenuAjustesPantalla(); // Recargar el menú para ver el cambio
+                    actualizarTextosPantalla();
+                    mostrarMenuAjustesPantalla(); 
                 })
                 .setPositiveButton("LISTO", null)
+                .show();
+    }
+
+    private void mostrarSubmenuTamanioPronostico() {
+        String[] nombresTamanios = {"CHICO", "MEDIANO", "GRANDE"};
+
+        new AlertDialog.Builder(this)
+                .setTitle("📐 Seleccionar Tamaño")
+                .setItems(nombresTamanios, (dialog, which) -> {
+                    tamanioPronosticoActual = which;
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit().putInt("tamanio_pronostico_v1", tamanioPronosticoActual).apply();
+                    
+                    // Forzar actualización inmediata del clima para ver el cambio de tamaño
+                    actualizarClima(); 
+                    mostrarMenuAjustesPantalla();
+                })
+                .setNegativeButton("ATRÁS", (dialog, which) -> mostrarMenuAjustesPantalla())
                 .show();
     }
 
@@ -937,10 +1237,13 @@ public class MainActivity extends AppCompatActivity {
                 dayBlock.setLayoutParams(lp);
 
                 // Línea 1: Icono + Día
+                int sizeUpper = (tamanioPronosticoActual == 0) ? 11 : (tamanioPronosticoActual == 2) ? 18 : 14;
+                int sizeLower = (tamanioPronosticoActual == 0) ? 9 : (tamanioPronosticoActual == 2) ? 15 : 12;
+
                 TextView textUpper = new TextView(this);
                 textUpper.setText(obtenerEmojiClimaMeteo(code) + " " + nombreDia.toUpperCase());
                 textUpper.setTextColor(android.graphics.Color.WHITE);
-                textUpper.setTextSize(11);
+                textUpper.setTextSize(sizeUpper);
                 textUpper.setShadowLayer(3, 1, 1, android.graphics.Color.BLACK);
                 dayBlock.addView(textUpper);
 
@@ -948,7 +1251,7 @@ public class MainActivity extends AppCompatActivity {
                 TextView textLower = new TextView(this);
                 textLower.setText(min + "/" + max);
                 textLower.setTextColor(android.graphics.Color.parseColor("#BBBBBB"));
-                textLower.setTextSize(10);
+                textLower.setTextSize(sizeLower);
                 textLower.setShadowLayer(2, 1, 1, android.graphics.Color.BLACK);
                 dayBlock.addView(textLower);
 
@@ -1544,7 +1847,7 @@ public class MainActivity extends AppCompatActivity {
                 "📂 Gestión de Listas IPTV",
                 "🔄 Actualizar Canales",
                 "📺 Ajustes de Pantalla",
-                "🔄 Recargar Lista Actual",
+                "⏲️ Temporizadores de Apagado",
                 "☀ Ajuste de Brillo",
                 "🔞 Control Parental (Adultos)",
                 "🎮 Guía de Controles",
@@ -1554,8 +1857,8 @@ public class MainActivity extends AppCompatActivity {
         String[] descripciones = {
                 "Añade, edita o elimina tus listas M3U.",
                 "Forzar descarga de canales desde el servidor.",
-                "Mostrar/Ocultar Reloj, Clima, Ciudad y Fecha.",
-                "Actualiza los canales de la lista en uso.",
+                "Ubicación y visibilidad de reloj y clima.",
+                "Sleep rápido y apagado programado diario.",
                 "Controla la intensidad de luz de la pantalla.",
                 "Configura la clave para contenido sensible.",
                 "Aprende cómo navegar y usar la app.",
@@ -1602,11 +1905,7 @@ public class MainActivity extends AppCompatActivity {
                     mostrarMenuAjustesPantalla();
                     break;
                 case 3:
-                    if (!urlListaActualEnUso.isEmpty()) {
-                        cargarListaDesdeUrl(urlListaActualEnUso);
-                        Toast.makeText(MainActivity.this, "Actualizando canales...", Toast.LENGTH_SHORT).show();
-                        alternarMenuConfiguracion();
-                    }
+                    mostrarMenuTemporizadores();
                     break;
                 case 4:
                     activarModoAjusteBrillo();
