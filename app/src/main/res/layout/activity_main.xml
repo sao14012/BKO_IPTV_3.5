@@ -188,6 +188,42 @@
         <!-- Los bloques de días se añaden por código con su propio fondo -->
     </LinearLayout>
 
+    <!-- NOTIFICACIÓN DE RED (Arriba Centro) -->
+    <LinearLayout
+        android:id="@+id/layout_estado_red"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="20dp"
+        android:background="#88000000"
+        android:paddingHorizontal="15dp"
+        android:paddingVertical="8dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/img_icono_red"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@android:drawable/ic_menu_directions"
+            android:tint="#00FF00" />
+
+        <TextView
+            android:id="@+id/text_estado_red"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="Conectado"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:shadowColor="#000000"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="2" />
+    </LinearLayout>
+
     <!-- Menú Lateral (Canales y Categorías) -->
     <LinearLayout
         android:id="@+id/contenedor_menus"

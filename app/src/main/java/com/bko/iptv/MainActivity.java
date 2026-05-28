@@ -143,6 +143,9 @@ public class MainActivity extends AppCompatActivity {
     private List<String> urlsDeListasGuardadas = new ArrayList<>();
     private Set<String> setDeCanalesFavoritos = new HashSet<>();
 
+    private View layoutEstadoRed;
+    private ImageView imgIconoRed;
+    private TextView textEstadoRed;
     private final Handler reintentoHandler = new Handler(Looper.getMainLooper());
     private String urlListaActualEnUso = "";
     private String androidIdUnico = "";
@@ -246,6 +249,13 @@ public class MainActivity extends AppCompatActivity {
         }
         playerView.setKeepScreenOn(true);
 
+        layoutEstadoRed = findViewById(R.id.layout_estado_red);
+        imgIconoRed = findViewById(R.id.img_icono_red);
+        textEstadoRed = findViewById(R.id.text_estado_red);
+
+        verificarConexionInicial();
+        monitorearCambiosRed();
+
         mDatabase = FirebaseDatabase.getInstance().getReference();
         String rawId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
         androidIdUnico = (rawId != null) ? rawId.toUpperCase() : "EQUIPO_DESCONOCIDO";
@@ -321,9 +331,17 @@ public class MainActivity extends AppCompatActivity {
                     if (playbackState == Player.STATE_READY) {
                         contadorErroresReproduccion = 0;
                     } else if (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED) {
+                        // El video se detuvo por completo: Mostrar fondo pero NO los botones si hay menús abiertos
                         if (layoutFondoInicio != null) {
                             layoutFondoInicio.setVisibility(View.VISIBLE);
-                            if (layoutBotonesInicio != null) layoutBotonesInicio.setVisibility(View.VISIBLE);
+                            
+                            boolean menusVisibles = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE) ||
+                                                 (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE);
+                            
+                            if (layoutBotonesInicio != null && !menusVisibles) {
+                                layoutBotonesInicio.setVisibility(View.VISIBLE);
+                                findViewById(R.id.btn_inicio_canales).requestFocus();
+                            }
                         }
                     }
                 }
@@ -331,13 +349,11 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onVideoSizeChanged(com.google.android.exoplayer2.video.VideoSize videoSize) {
                     if (videoSize.width > 0 && videoSize.height > 0) {
-                        // ES VIDEO: Ocultar fondo y botones
+                        // ES VIDEO: Ocultar fondo y botones inmediatamente
                         if (layoutFondoInicio != null) layoutFondoInicio.setVisibility(View.GONE);
                         if (layoutBotonesInicio != null) layoutBotonesInicio.setVisibility(View.GONE);
                     } else {
-                        // ES AUDIO/RADIO: Mostrar fondo con botones (sin texto extra)
-                        if (layoutFondoInicio != null) layoutFondoInicio.setVisibility(View.VISIBLE);
-                        if (layoutBotonesInicio != null) layoutBotonesInicio.setVisibility(View.VISIBLE);
+                        // CARGANDO O AUDIO: No mostramos los botones todavía para evitar el "flash" entre canales
                     }
                 }
 
@@ -353,7 +369,11 @@ public class MainActivity extends AppCompatActivity {
 
                         if (layoutFondoInicio != null) {
                             layoutFondoInicio.setVisibility(View.VISIBLE);
-                            if (layoutBotonesInicio != null) {
+                            // Solo mostramos los botones y pedimos foco si NO hay un menú abierto
+                            boolean menusAbiertos = (contenedorMenus != null && contenedorMenus.getVisibility() == View.VISIBLE) ||
+                                                 (contenedorConfiguracion != null && contenedorConfiguracion.getVisibility() == View.VISIBLE);
+                            
+                            if (layoutBotonesInicio != null && !menusAbiertos) {
                                 layoutBotonesInicio.setVisibility(View.VISIBLE);
                                 findViewById(R.id.btn_inicio_canales).requestFocus();
                             }
@@ -489,7 +509,10 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     reproducirCanalEstable(seleccionado, player);
                 }
-                limpiarBuscadorOcultarMenus();
+                // CERRAMOS el menú para ver el reproductor, pero NO limpiamos el texto del buscador
+                if (contenedorMenus != null) {
+                    contenedorMenus.setVisibility(View.GONE);
+                }
             });
 
             listViewCanales.setOnItemLongClickListener((parent, view1, position, id) -> {
@@ -847,10 +870,13 @@ public class MainActivity extends AppCompatActivity {
                 org.json.JSONObject current = jsonW.getJSONObject("current_weather");
                 double tempActual = current.getDouble("temperature");
                 int codeActual = current.getInt("weathercode");
+                
+                // Obtener Máx/Mín de HOY (índice 0 del array daily)
+                org.json.JSONObject daily = jsonW.getJSONObject("daily");
+                
                 temperaturaActual = Math.round(tempActual) + "°C " + obtenerEmojiClimaMeteo(codeActual);
                 
                 // Procesar Pronóstico Extendido
-                org.json.JSONObject daily = jsonW.getJSONObject("daily");
                 org.json.JSONArray dailyTimes = daily.getJSONArray("time");
                 org.json.JSONArray dailyCodes = daily.getJSONArray("weathercode");
                 org.json.JSONArray dailyMaxs = daily.getJSONArray("temperature_2m_max");
@@ -882,8 +908,8 @@ public class MainActivity extends AppCompatActivity {
         java.util.Calendar cal = java.util.Calendar.getInstance();
 
         try {
-            // Empezamos desde i=1 para mostrar desde MAÑANA (i=0 es hoy)
-            for (int i = 1; i < 6; i++) {
+            // Empezamos desde i=0 para mostrar desde HOY
+            for (int i = 0; i < 5; i++) {
                 String dateStr = times.getString(i);
                 int code = codes.getInt(i);
                 int max = (int) Math.round(maxs.getDouble(i));
@@ -893,7 +919,9 @@ public class MainActivity extends AppCompatActivity {
                 java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
                 java.util.Date date = sdf.parse(dateStr);
                 if (date != null) cal.setTime(date);
-                String nombreDia = diasNombres[cal.get(java.util.Calendar.DAY_OF_WEEK) - 1];
+                
+                // Si es el índice 0, ponemos "HOY", si no, el día abreviado
+                String nombreDia = (i == 0) ? "HOY" : diasNombres[cal.get(java.util.Calendar.DAY_OF_WEEK) - 1];
 
                 // Crear Bloque de Día
                 LinearLayout dayBlock = new LinearLayout(this);
@@ -990,9 +1018,7 @@ public class MainActivity extends AppCompatActivity {
     private void continuarReproduccion(CanalEstructura canal, ExoPlayer targetPlayer) {
         if (targetPlayer == player) {
             this.canalActualReproduciendo = canal;
-            if (layoutFondoInicio != null) {
-                layoutFondoInicio.setVisibility(View.VISIBLE);
-            }
+            // ELIMINADA la línea que forzaba la visibilidad del fondo aquí
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
                     .putString(KEY_ULTIMO_CANAL_SINTONIZADO, canal.urlStream)
@@ -1441,6 +1467,9 @@ public class MainActivity extends AppCompatActivity {
             if (contenedorMenus.getVisibility() == View.VISIBLE) {
                 limpiarBuscadorOcultarMenus();
             } else {
+                // Al abrir el menú, ocultamos los botones de inicio para que no roben el foco
+                if (layoutBotonesInicio != null) layoutBotonesInicio.setVisibility(View.GONE);
+                
                 if (textNombreListaCabecera != null) {
                     textNombreListaCabecera.setText("LISTA: " + nombreListaActualEnUso.toUpperCase());
                 }
@@ -1475,6 +1504,14 @@ public class MainActivity extends AppCompatActivity {
         if (inputBuscadorTiempoReal != null) inputBuscadorTiempoReal.setText("");
         if (contenedorMenus != null) contenedorMenus.setVisibility(View.GONE);
         if (contenedorConfiguracion != null) contenedorConfiguracion.setVisibility(View.GONE);
+        
+        // Si no hay video reproduciéndose, devolvemos la visibilidad a los botones de inicio
+        if (player != null && !player.isPlaying()) {
+            if (layoutBotonesInicio != null) {
+                layoutBotonesInicio.setVisibility(View.VISIBLE);
+                findViewById(R.id.btn_inicio_canales).requestFocus();
+            }
+        }
     }
 
     private String normalizarTexto(String texto) {
@@ -2216,6 +2253,73 @@ public class MainActivity extends AppCompatActivity {
         mDatabase.child("clientes").child(androidIdUnico).child("timestamp_registro").setValue(ServerValue.TIMESTAMP);
         equipoActivadoRemotamente = false;
         verificarSiMostrarConfiguracionObligatoria();
+    }
+
+    private void verificarConexionInicial() {
+        android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        android.net.NetworkInfo activeNetwork = (cm != null) ? cm.getActiveNetworkInfo() : null;
+        boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();
+
+        if (isConnected) {
+            String nombreRed = "Internet";
+            try {
+                if (activeNetwork.getType() == android.net.ConnectivityManager.TYPE_WIFI) {
+                    android.net.wifi.WifiManager wifiManager = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                    if (wifiManager != null) {
+                        android.net.wifi.WifiInfo info = wifiManager.getConnectionInfo();
+                        if (info != null && info.getSSID() != null && !info.getSSID().equals("<unknown ssid>")) {
+                            nombreRed = info.getSSID().replace("\"", "");
+                        } else {
+                            nombreRed = "WiFi";
+                        }
+                    }
+                } else if (activeNetwork.getType() == android.net.ConnectivityManager.TYPE_ETHERNET) {
+                    nombreRed = "Cable LAN";
+                }
+            } catch (Exception e) {
+                nombreRed = "Conectado";
+            }
+            mostrarNotificacionRed(true, "Conectado a " + nombreRed);
+        } else {
+            mostrarNotificacionRed(false, "Sin conexión a Internet");
+        }
+    }
+
+    private void monitorearCambiosRed() {
+        android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            cm.registerDefaultNetworkCallback(new android.net.ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(android.net.Network network) {
+                    runOnUiThread(() -> {
+                        mostrarNotificacionRed(true, "Conexión restablecida");
+                    });
+                }
+
+                @Override
+                public void onLost(android.net.Network network) {
+                    runOnUiThread(() -> {
+                        mostrarNotificacionRed(false, "Sin conexión a Internet");
+                    });
+                }
+            });
+        }
+    }
+
+    private void mostrarNotificacionRed(boolean conectado, String mensaje) {
+        if (layoutEstadoRed == null || imgIconoRed == null || textEstadoRed == null) return;
+
+        layoutEstadoRed.setVisibility(View.VISIBLE);
+        textEstadoRed.setText(mensaje);
+        
+        if (conectado) {
+            imgIconoRed.setColorFilter(android.graphics.Color.GREEN);
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (layoutEstadoRed != null) layoutEstadoRed.setVisibility(View.GONE);
+            }, 5000);
+        } else {
+            imgIconoRed.setColorFilter(android.graphics.Color.RED);
+        }
     }
 
     private void verificarSiMostrarConfiguracionObligatoria() {
