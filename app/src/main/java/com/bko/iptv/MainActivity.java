@@ -105,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
     private String temperaturaActual = "";
     private String ciudadActual = "";
     private boolean verReloj = true, verClima = true, verCiudad = true, verFecha = true, verPronostico = false;
+    private boolean modoEstableInternet = false;
     private int alineacionBloqueActual = 0; // 0 a 7
     private int tamanioPronosticoActual = 1; // 0: CHICO, 1: MEDIANO, 2: GRANDE
     private final Handler relojHandler = new Handler(Looper.getMainLooper());
@@ -146,6 +147,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_ULTIMO_CANAL_SINTONIZADO = "ultimo_canal_sintonizado_url";
     private static final String KEY_CLAVE_ADULTOS = "clave_parental_adultos";
     private static final String KEY_MOSTRAR_ADULTOS = "mostrar_contenido_adulto";
+    private static final String KEY_MODO_ESTABLE = "modo_estable_internet_v1";
     private boolean mostrarContenidoAdulto = false;
 
     private List<String> nombresDeListasGuardadas = new ArrayList<>();
@@ -277,6 +279,7 @@ public class MainActivity extends AppCompatActivity {
         aplicarBrilloVisual(nivelBrilloActual);
         claveAdultos = prefs.getString(KEY_CLAVE_ADULTOS, "0000");
         mostrarContenidoAdulto = prefs.getBoolean(KEY_MOSTRAR_ADULTOS, false);
+        modoEstableInternet = prefs.getBoolean(KEY_MODO_ESTABLE, false);
 
         // Efecto de Zoom suave para el Splash
         if (imagenSplash != null) {
@@ -300,15 +303,33 @@ public class MainActivity extends AppCompatActivity {
         }, 3000);
 
         try {
-            // Configuramos el selector de pistas para forzar máxima calidad
+            // 1. Configuramos el selector de pistas para forzar máxima calidad
             com.google.android.exoplayer2.trackselection.DefaultTrackSelector trackSelector = 
                 new com.google.android.exoplayer2.trackselection.DefaultTrackSelector(this);
             trackSelector.setParameters(trackSelector.buildUponParameters()
-                .setMaxVideoSizeSd() // Esto es un truco: le decimos que el máximo sea gigante para que elija HD
+                .setMaxVideoSizeSd() 
                 .setForceHighestSupportedBitrate(true));
 
-            DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(20000, 60000, 2500, 5000).build();
+            // 2. CONFIGURACIÓN DE BUFFER (Diferente según el modo)
+            DefaultLoadControl.Builder loadControlBuilder = new DefaultLoadControl.Builder();
+            if (modoEstableInternet) {
+                // MODO ESTABLE: Buffer grande para internet inestable
+                loadControlBuilder.setBufferDurationsMs(
+                    30000, // Min Buffer 30s
+                    90000, // Max Buffer 90s
+                    5000,  // Playback start 5s
+                    10000  // Rebuffer playback 10s
+                );
+            } else {
+                // MODO RÁPIDO: Lo que ya tenías optimizado
+                loadControlBuilder.setBufferDurationsMs(
+                    20000, // Min Buffer 20s (Seguimos manteniendo 20s como base para evitar cortes)
+                    60000, // Max Buffer 60s
+                    2500,  // Playback start 2.5s
+                    5000   // Rebuffer playback 5s
+                );
+            }
+            DefaultLoadControl loadControl = loadControlBuilder.build();
 
             player = new ExoPlayer.Builder(this)
                     .setTrackSelector(trackSelector)
@@ -1848,6 +1869,7 @@ public class MainActivity extends AppCompatActivity {
                 "🔄 Actualizar Canales",
                 "📺 Ajustes de Pantalla",
                 "⏲️ Temporizadores de Apagado",
+                "🚀 Optimización de Red",
                 "☀ Ajuste de Brillo",
                 "🔞 Control Parental (Adultos)",
                 "🎮 Guía de Controles",
@@ -1859,7 +1881,8 @@ public class MainActivity extends AppCompatActivity {
                 "Forzar descarga de canales desde el servidor.",
                 "Ubicación y visibilidad de reloj y clima.",
                 "Sleep rápido y apagado programado diario.",
-                "Controla la intensidad de luz de la pantalla.",
+                "Modos Rápido o Estable (para internet lento).",
+                "Control la intensidad de luz de la pantalla.",
                 "Configura la clave para contenido sensible.",
                 "Aprende cómo navegar y usar la app.",
                 "Información de la versión 3.5"
@@ -1908,15 +1931,18 @@ public class MainActivity extends AppCompatActivity {
                     mostrarMenuTemporizadores();
                     break;
                 case 4:
-                    activarModoAjusteBrillo();
+                    mostrarMenuOptimizacionRed();
                     break;
                 case 5:
-                    verificarClaveAdultos();
+                    activarModoAjusteBrillo();
                     break;
                 case 6:
-                    mostrarGuiaControles();
+                    verificarClaveAdultos();
                     break;
                 case 7:
+                    mostrarGuiaControles();
+                    break;
+                case 8:
                     String androidId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
                     new AlertDialog.Builder(MainActivity.this)
                             .setTitle("BKO IPTV 3.5")
@@ -1932,6 +1958,50 @@ public class MainActivity extends AppCompatActivity {
                     break;
             }
         });
+    }
+
+    private void mostrarMenuOptimizacionRed() {
+        String modoActual = modoEstableInternet ? "🛡️ MODO ESTABLE" : "🚀 MODO RÁPIDO";
+        String[] opciones = {
+            "Modo Actual: " + modoActual,
+            "🚀 Cambiar a MODO RÁPIDO (Fibra/Buen WiFi)",
+            "🛡️ Cambiar a MODO ESTABLE (Internet Lento/Cortes)"
+        };
+
+        new AlertDialog.Builder(this)
+            .setTitle("🚀 Optimización de Red")
+            .setItems(opciones, (dialog, which) -> {
+                if (which == 0) {
+                    mostrarMenuOptimizacionRed();
+                    return;
+                }
+                
+                boolean nuevoModo = (which == 2);
+                if (nuevoModo != modoEstableInternet) {
+                    modoEstableInternet = nuevoModo;
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit().putBoolean(KEY_MODO_ESTABLE, modoEstableInternet).apply();
+                    
+                    new AlertDialog.Builder(this)
+                        .setTitle("🔄 Cambio de Motor")
+                        .setMessage("Para aplicar la optimización de red, es necesario reiniciar la aplicación.\n\n¿Desea reiniciar ahora?")
+                        .setPositiveButton("REINICIAR", (d, w) -> {
+                            android.content.Intent intent = getBaseContext().getPackageManager()
+                                .getLaunchIntentForPackage(getBaseContext().getPackageName());
+                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent);
+                            finish();
+                        })
+                        .setNegativeButton("LUEGO", null)
+                        .show();
+                } else {
+                    Toast.makeText(this, "Ese modo ya está activo", Toast.LENGTH_SHORT).show();
+                    mostrarMenuOptimizacionRed();
+                }
+            })
+            .setPositiveButton("VOLVER", null)
+            .show();
     }
 
     private void mostrarGuiaControles() {
